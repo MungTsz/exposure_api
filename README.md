@@ -9,8 +9,12 @@ indoor/outdoor results for the app's bar chart.
 ```bash
 pip install -r requirements.txt
 cp .env.example .env   # fill in PRAISE_API_KEY and PRAISE_MYID
-uvicorn app.main:app --reload
+uvicorn exposure_api_github.main:app --reload
 ```
+
+This directory is itself the `exposure_api` package (see CLAUDE.md), so the
+command above must be run from its *parent* directory - either check this
+repo out into a folder named `exposure_api`, or `cd` up one level first.
 
 `.env` is loaded automatically (via `python-dotenv`) when `praise_client.py`/`db.py` are imported - no manual `export` step needed.
 
@@ -51,10 +55,15 @@ curl http://localhost:8000/exposure/hourly/local-device
 
 ```json
 [
-  {"hour_start_hk": "20260830000000", "io": "Outdoor", "delta_t_hours": 0.04, "exposure_value": 0.02},
-  {"hour_start_hk": "20260830000000", "io": "Indoor",  "delta_t_hours": 0.9,  "exposure_value": 0.31}
+  {"hour_start_hk": "20260830000000", "io": "Outdoor", "delta_t_hours": 0.04, "exposure_value": 0.02, "lng": 114.2632457, "lat": 22.3399579},
+  {"hour_start_hk": "20260830000000", "io": "Indoor",  "delta_t_hours": 0.9,  "exposure_value": 0.31, "lng": 114.2632457, "lat": 22.3399579}
 ]
 ```
+
+`lng`/`lat` are the dwell run's reference point (its first ping - see
+`find_dwell_runs` in `etl.py`). If more than one same-labelled run lands in
+the same hour, the row's `(pid, hour_start_hk, io)` primary key means only
+the last-processed run's coordinates are kept, not an average of all of them.
 
 ## Local network testing (RN app on a device/emulator)
 
@@ -91,7 +100,7 @@ ever tested from a browser context (e.g. Expo web).
 
 ## Tuning
 
-All thresholds live at the top of `app/etl.py`:
+All thresholds live at the top of `etl.py`:
 
 - `SPIKE_ANGLE_DEG` / `SPIKE_TIME_WINDOW_SECONDS` - GPS spike rejection.
 - `DWELL_INDOOR_MINUTES` / `DWELL_RADIUS_METERS` - indoor/outdoor dwell test.

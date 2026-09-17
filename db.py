@@ -70,7 +70,7 @@ def get_hourly(pid: str) -> List[Dict[str, Any]]:
         conn.row_factory = sqlite3.Row
         cur = conn.execute(
             """
-            SELECT hour_start_hk, io, delta_t_hours, exposure_value
+            SELECT hour_start_hk, io, delta_t_hours, exposure_value, lng, lat
             FROM hourly_exposure
             WHERE pid = ?
             ORDER BY hour_start_hk
