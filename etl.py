@@ -224,6 +224,13 @@ def split_by_hour(runs: List[DwellRun]) -> List[IoSegment]:
     return segments
 
 
+# expo_calx doesn't recognize "Indoor" as an IO value - confirmed by direct API
+# calls that it silently returns -9 for "Indoor" but a real value for "Office"
+# at the same coordinates/time. Only translate at this API-request boundary;
+# "Indoor" stays the label everywhere else (dwell classification, DB, chart).
+_API_IO_LABEL = {"Indoor": "Office", "Outdoor": "Outdoor"}
+
+
 def to_request_rows(pid: str, segments: List[IoSegment]) -> List[list]:
     """Convert IoSegments (with delta_t > 0) into expo_calx's 6-field rows."""
     rows = []
@@ -236,7 +243,7 @@ def to_request_rows(pid: str, segments: List[IoSegment]) -> List[list]:
                 pid,
                 seg.lng,
                 seg.lat,
-                {"IO": seg.io},
+                {"IO": _API_IO_LABEL[seg.io]},
                 round(seg.delta_t_hours, 6),
             ]
         )
