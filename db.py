@@ -6,11 +6,12 @@ per-hour bar chart needs. Swap sqlite3 for Postgres/etc. later without
 changing the shape of this module's public functions.
 """
 
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 
@@ -29,6 +30,18 @@ CREATE TABLE IF NOT EXISTS hourly_exposure (
     lat REAL,
     PRIMARY KEY (pid, hour_start_hk, io)
 );
+
+CREATE TABLE IF NOT EXISTS ingest_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pid TEXT NOT NULL,
+    features_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',  -- pending | processing | done | error
+    error_detail TEXT,
+    hours_processed INTEGER,
+    rows INTEGER,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
 """
 
 
@@ -44,7 +57,7 @@ def get_conn():
 
 def init_db() -> None:
     with get_conn() as conn:
-        conn.execute(SCHEMA)
+        conn.executescript(SCHEMA)
 
 
 def upsert_hourly(rows: List[Dict[str, Any]]) -> None:
@@ -78,3 +91,71 @@ def get_hourly(pid: str) -> List[Dict[str, Any]]:
             (pid,),
         )
         return [dict(r) for r in cur.fetchall()]
+
+
+def create_batch(pid: str, features: List[Dict[str, Any]]) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO ingest_batches (pid, features_json) VALUES (?, ?)",
+            (pid, json.dumps(features)),
+        )
+        return cur.lastrowid
+
+
+def mark_processing(batch_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE ingest_batches SET status = 'processing', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?",
+            (batch_id,),
+        )
+
+
+def mark_done(batch_id: int, hours_processed: int, rows: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE ingest_batches
+            SET status = 'done', hours_processed = ?, rows = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE id = ?
+            """,
+            (hours_processed, rows, batch_id),
+        )
+
+
+def mark_error(batch_id: int, detail: str) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE ingest_batches
+            SET status = 'error', error_detail = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE id = ?
+            """,
+            (detail, batch_id),
+        )
+
+
+def get_batch(batch_id: int) -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute(
+            """
+            SELECT id, pid, status, error_detail, hours_processed, rows, created_at, updated_at
+            FROM ingest_batches
+            WHERE id = ?
+            """,
+            (batch_id,),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def get_incomplete_batches() -> List[Dict[str, Any]]:
+    with get_conn() as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute(
+            "SELECT id, pid, features_json FROM ingest_batches WHERE status IN ('pending', 'processing') ORDER BY id"
+        )
+        return [
+            {"id": r["id"], "pid": r["pid"], "features": json.loads(r["features_json"])}
+            for r in cur.fetchall()
+        ]
