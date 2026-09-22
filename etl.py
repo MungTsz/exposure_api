@@ -5,10 +5,12 @@ Order of operations (matches the agreed design):
   1. Parse + sort raw pings.
   2. Remove GPS spike outliers (sharp-angle-in-a-short-time test).
   3. Classify indoor vs outdoor by dwell time over the full, continuous ping
-     stream (a run of nearby points lasting long enough = indoor). Classifying
-     before splitting by hour means a dwell run that straddles an hour
-     boundary is judged by its true total duration, not by whichever partial
-     slice happens to land in one clock hour.
+     stream (a run of nearby, slow-moving points lasting long enough = indoor).
+     "Nearby" is a flat lat/lng degree box around the run's first point, not
+     haversine - deliberately simple. Classifying before splitting by hour
+     means a dwell run that straddles an hour boundary is judged by its true
+     total duration, not by whichever partial slice happens to land in one
+     clock hour.
   4. Slice each labelled run at HK-local clock-hour boundaries, carrying the
      run's io label into every hour it touches (and prorating delta_t).
   5. Build one [t, pid, lng, lat, x, delta_t] row per (hour, IO segment).
@@ -30,7 +32,24 @@ SPIKE_TIME_WINDOW_SECONDS = 120  # only flag as a spike if A->C happened this fa
 
 # --- Indoor/outdoor dwell tuning ---
 DWELL_INDOOR_MINUTES = 20       # a stationary run at least this long = indoor
-DWELL_RADIUS_METERS = 25        # "same location" tolerance for GPS drift
+
+# Degree-based "same location" tolerance for GPS drift, deliberately used
+# instead of a haversine distance so the check is a plain lat/lng delta
+# comparison. 0.0001 deg of lat/lng is ~11.1m, so ~0.00018 deg is ~20m - loose
+# enough to absorb typical indoor GPS drift (consumer GPS horizontal accuracy
+# is commonly 5-20m, worse indoors from multipath), tight enough not to merge
+# genuinely separate stops. Applied as a flat box on both lat and lng, with
+# no per-latitude correction for longitude compression.
+DWELL_DEGREE_THRESHOLD = 0.00018
+
+# A point only counts as part of the same stationary run if its own reported
+# speed (when the device provides one - many raw pings don't) is below this.
+# ~1.0 m/s (~3.6 km/h) is a brisk-walk cutoff: comfortably separates indoor
+# puttering (getting up, pacing a room) from real outdoor travel (walking
+# commute is usually 1.2 m/s+, any transit mode faster still), without
+# rejecting legitimate slow indoor movement. A missing speed reading doesn't
+# block a point from joining the run - only a reported *fast* speed does.
+SPEED_THRESHOLD_MPS = 1.0
 
 IoLabel = Literal["Indoor", "Outdoor"]
 
@@ -40,6 +59,7 @@ class Ping:
     utc: datetime
     lng: float
     lat: float
+    speed_mps: Optional[float] = None  # device-reported speed, m/s; None if not provided
 
 
 @dataclass
@@ -47,8 +67,8 @@ class DwellRun:
     start_utc: datetime
     end_utc: datetime
     io: IoLabel
-    lng: float  # avg over the run's pings
-    lat: float  # avg over the run's pings
+    lng: float  # anchor (first ping) for Indoor runs, avg over the run's pings for Outdoor
+    lat: float  # anchor (first ping) for Indoor runs, avg over the run's pings for Outdoor
 
 
 @dataclass
@@ -80,11 +100,19 @@ def parse_pings(features: List[Dict[str, Any]]) -> List[Ping]:
     return pings
 
 
+def _clean_speed(speed: Optional[float]) -> Optional[float]:
+    # react-native-background-geolocation reports -1 (or negative) for
+    # "unknown" rather than omitting the field - treat that as no reading.
+    if speed is None or speed < 0:
+        return None
+    return speed
+
+
 def _parse_geojson_feature(f: Dict[str, Any]) -> Ping:
     t = f["properties"]["time"]
     dt = datetime.fromisoformat(t.replace("Z", "+00:00"))
     lng, lat = f["geometry"]["coordinates"][0], f["geometry"]["coordinates"][1]
-    return Ping(utc=dt, lng=lng, lat=lat)
+    return Ping(utc=dt, lng=lng, lat=lat, speed_mps=_clean_speed(f["properties"].get("speed")))
 
 
 def _parse_live_tracking_ping(f: Dict[str, Any]) -> Optional[Ping]:
@@ -92,16 +120,7 @@ def _parse_live_tracking_ping(f: Dict[str, Any]) -> Optional[Ping]:
         return None
     dt = datetime.fromisoformat(f["timestamp"].replace("Z", "+00:00"))
     coords = f["coords"]
-    return Ping(utc=dt, lng=coords["longitude"], lat=coords["latitude"])
-
-
-def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    R = 6371000.0
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlmb = math.radians(lng2 - lng1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlmb / 2) ** 2
-    return 2 * R * math.asin(math.sqrt(a))
+    return Ping(utc=dt, lng=coords["longitude"], lat=coords["latitude"], speed_mps=_clean_speed(coords.get("speed")))
 
 
 def _angle_at_b_deg(a: Ping, b: Ping, c: Ping) -> float:
@@ -146,11 +165,24 @@ def _to_hk(dt_utc: datetime) -> datetime:
     return (dt_utc.astimezone(timezone.utc) + HK_OFFSET).replace(tzinfo=None)
 
 
+def _within_dwell_box(ref: Ping, p: Ping) -> bool:
+    return (
+        abs(p.lat - ref.lat) <= DWELL_DEGREE_THRESHOLD
+        and abs(p.lng - ref.lng) <= DWELL_DEGREE_THRESHOLD
+    )
+
+
+def _is_slow_enough(p: Ping) -> bool:
+    return p.speed_mps is None or p.speed_mps < SPEED_THRESHOLD_MPS
+
+
 def find_dwell_runs(pings: List[Ping]) -> List[DwellRun]:
     """Split the full, continuous ping stream into indoor/outdoor runs by dwell time.
 
     A "run" is a maximal sequence of consecutive points that all stay within
-    DWELL_RADIUS_METERS of the run's first point. If the run's total duration
+    DWELL_DEGREE_THRESHOLD (a flat lat/lng box, not haversine) of the run's
+    first point AND report a speed below SPEED_THRESHOLD_MPS (points with no
+    speed reading are judged on distance alone). If the run's total duration
     clears DWELL_INDOOR_MINUTES, it's labelled Indoor; otherwise Outdoor.
     Note: the very last run has no further point to bound its end, so its
     duration is computed up to its own last ping only.
@@ -166,22 +198,27 @@ def find_dwell_runs(pings: List[Ping]) -> List[DwellRun]:
         start_utc = run[0].utc
         duration_min = max(0.0, (end_time_utc - start_utc).total_seconds() / 60.0)
         io: IoLabel = "Indoor" if duration_min >= DWELL_INDOOR_MINUTES else "Outdoor"
-        avg_lng = sum(p.lng for p in run) / len(run)
-        avg_lat = sum(p.lat for p in run) / len(run)
+        if io == "Indoor":
+            # Collapse the whole dwell to its anchor point - GPS drift while
+            # stationary indoors shouldn't be treated as distinct locations.
+            lng, lat = run[0].lng, run[0].lat
+        else:
+            lng = sum(p.lng for p in run) / len(run)
+            lat = sum(p.lat for p in run) / len(run)
         runs.append(
             DwellRun(
                 start_utc=start_utc,
                 end_utc=end_time_utc,
                 io=io,
-                lng=avg_lng,
-                lat=avg_lat,
+                lng=lng,
+                lat=lat,
             )
         )
 
     run = [pings[0]]
     for p in pings[1:]:
         ref = run[0]
-        if _haversine_m(ref.lat, ref.lng, p.lat, p.lng) <= DWELL_RADIUS_METERS:
+        if _within_dwell_box(ref, p) and _is_slow_enough(p):
             run.append(p)
         else:
             flush(run, p.utc)
@@ -224,11 +261,10 @@ def split_by_hour(runs: List[DwellRun]) -> List[IoSegment]:
     return segments
 
 
-# expo_calx doesn't recognize "Indoor" as an IO value - confirmed by direct API
-# calls that it silently returns -9 for "Indoor" but a real value for "Office"
-# at the same coordinates/time. Only translate at this API-request boundary;
-# "Indoor" stays the label everywhere else (dwell classification, DB, chart).
-_API_IO_LABEL = {"Indoor": "Office", "Outdoor": "Outdoor"}
+# expo_calx doesn't recognize "Indoor" as an IO value, so it's translated to
+# "Home" at this API-request boundary only; "Indoor" stays the label
+# everywhere else (dwell classification, DB, chart).
+_API_IO_LABEL = {"Indoor": "Home", "Outdoor": "Outdoor"}
 
 
 def to_request_rows(pid: str, segments: List[IoSegment]) -> List[list]:

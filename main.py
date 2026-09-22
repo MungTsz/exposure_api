@@ -111,6 +111,7 @@ def _process_batch(batch_id: int, pid: str, features: List[Dict[str, Any]]) -> N
             {
                 "pid": pid,
                 "hour_start_hk": seg.hour_start_hk.strftime("%Y%m%d%H0000"),
+                "start_time_hk": seg.start_time_hk.strftime("%Y%m%d%H%M%S"),
                 "io": seg.io,
                 "delta_t_hours": seg.delta_t_hours,
                 "exposure_value": None if value == -9 else value,
@@ -135,5 +136,9 @@ def get_ingest_status(batch_id: int) -> Dict[str, Any]:
 
 @app.get("/exposure/hourly/{pid}")
 def get_hourly(pid: str) -> List[Dict[str, Any]]:
-    """Returns one entry per (hour, IO) - ready to feed straight into a stacked bar chart."""
+    """Returns one entry per (hour, IO, run) - more than one row can share an
+    hour_start_hk+io if multiple separate runs landed in that hour. Sum
+    delta_t_hours/exposure_value across rows sharing an hour_start_hk+io for
+    the stacked bar chart; use each row's own lng/lat (in start_time_hk
+    order) to draw the route."""
     return db.get_hourly(pid)

@@ -1,9 +1,13 @@
 """
 Minimal SQLite storage for hourly indoor/outdoor exposure results.
 
-One row per (pid, hour, IO label) - exactly the two stacked segments a
-per-hour bar chart needs. Swap sqlite3 for Postgres/etc. later without
-changing the shape of this module's public functions.
+One row per (pid, IO label, run) - a clock hour can hold more than one row
+of the same label if multiple separate runs land in it (e.g. two distinct
+outdoor trips within the same hour), so callers sum delta_t_hours/
+exposure_value across rows sharing an hour_start_hk+io for the chart, and
+use each row's own lng/lat (ordered by start_time_hk) to draw a route.
+Swap sqlite3 for Postgres/etc. later without changing the shape of this
+module's public functions.
 """
 
 import json
@@ -22,13 +26,14 @@ DB_PATH = os.environ.get("EXPOSURE_DB_PATH", "exposure.db")
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS hourly_exposure (
     pid TEXT NOT NULL,
-    hour_start_hk TEXT NOT NULL,   -- 'YYYYMMDDHH0000', HK local
+    hour_start_hk TEXT NOT NULL,   -- 'YYYYMMDDHH0000', HK local - hour bucket, for chart grouping
+    start_time_hk TEXT NOT NULL,   -- 'YYYYMMDDHHMMSS', HK local - this run's own precise start time
     io TEXT NOT NULL,              -- 'Indoor' | 'Outdoor'
     delta_t_hours REAL NOT NULL,
     exposure_value REAL,           -- NULL if expo_calx returned -9 for this row
     lng REAL,
     lat REAL,
-    PRIMARY KEY (pid, hour_start_hk, io)
+    PRIMARY KEY (pid, io, start_time_hk)
 );
 
 CREATE TABLE IF NOT EXISTS ingest_batches (
@@ -66,9 +71,10 @@ def upsert_hourly(rows: List[Dict[str, Any]]) -> None:
     with get_conn() as conn:
         conn.executemany(
             """
-            INSERT INTO hourly_exposure (pid, hour_start_hk, io, delta_t_hours, exposure_value, lng, lat)
-            VALUES (:pid, :hour_start_hk, :io, :delta_t_hours, :exposure_value, :lng, :lat)
-            ON CONFLICT(pid, hour_start_hk, io) DO UPDATE SET
+            INSERT INTO hourly_exposure (pid, hour_start_hk, start_time_hk, io, delta_t_hours, exposure_value, lng, lat)
+            VALUES (:pid, :hour_start_hk, :start_time_hk, :io, :delta_t_hours, :exposure_value, :lng, :lat)
+            ON CONFLICT(pid, io, start_time_hk) DO UPDATE SET
+                hour_start_hk = excluded.hour_start_hk,
                 delta_t_hours = excluded.delta_t_hours,
                 exposure_value = excluded.exposure_value,
                 lng = excluded.lng,
@@ -83,10 +89,10 @@ def get_hourly(pid: str) -> List[Dict[str, Any]]:
         conn.row_factory = sqlite3.Row
         cur = conn.execute(
             """
-            SELECT hour_start_hk, io, delta_t_hours, exposure_value, lng, lat
+            SELECT hour_start_hk, start_time_hk, io, delta_t_hours, exposure_value, lng, lat
             FROM hourly_exposure
             WHERE pid = ?
-            ORDER BY hour_start_hk
+            ORDER BY start_time_hk
             """,
             (pid,),
         )

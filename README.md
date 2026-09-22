@@ -20,50 +20,172 @@ repo out into a folder named `exposure_api`, or `cd` up one level first.
 
 ## Endpoints
 
-**POST /ingest** - the RN app sends a batch of raw pings here (e.g. once an
-hour, or whenever it has connectivity). `features` accepts either GeoJSON
-`Feature` objects (watch-exported test data) or live device-tracking
-location objects (`react-native-background-geolocation`-style: `timestamp`,
-`coords.latitude`/`coords.longitude`) - the two shapes can even be mixed in
-the same batch. Live-tracking records with `sample: true` (a transient
-reading not meant to be persisted) are dropped; `mock: true` (fake-GPS)
-records are kept as-is:
+| Method & path | Purpose |
+|---|---|
+| `POST /ingest` | upload a batch of raw GPS pings for background processing |
+| `GET /ingest/{batch_id}` | poll a batch's processing status |
+| `GET /exposure/hourly/{pid}` | read back the processed hourly indoor/outdoor rows |
 
-```bash
-curl -X POST http://localhost:8000/ingest \
-  -H "Content-Type: application/json" \
-  -d '{
-        "pid": "local-device",
-        "features": [
-          {"type":"Feature","properties":{"time":"2026-08-29T16:00:03.048Z"},"geometry":{"type":"Point","coordinates":[114.2632457,22.3399579]}},
-          {"timestamp":"2026-08-29T16:05:12.048Z","coords":{"latitude":22.3399579,"longitude":114.2632457}}
-        ]
-      }'
+### Try it yourself
+
+Every command below is **Command Prompt (`cmd.exe`)** syntax: the whole
+JSON body is wrapped in double quotes with the inner quotes escaped
+(`\"`). If you're in bash, git-bash, or PowerShell instead, single-quote
+the body as-is - `-d '{"pid": ...}'` - and drop the backslashes; all three
+of those shells treat `'...'` as a literal string, unlike `cmd.exe`.
+
+Each scenario uses its own `pid` and fixed, made-up timestamps/coordinates,
+so what you get back is exactly reproducible - **except** `exposure_value`,
+which comes from the live third-party `expo_calx` API and will genuinely
+differ from what's shown here (it depends on the real air quality reading
+at that time/place). Everything else - the number of rows, `io`,
+`delta_t_hours`, `lng`/`lat` - should match exactly.
+
+#### 1. Two pings, same spot, 10 minutes apart → **one** row
+
+```bat
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\": \"demo-merge\", \"features\": [{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:00:00.000Z\",\"speed\":0.05},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"timestamp\":\"2026-08-29T16:10:00.000Z\",\"coords\":{\"latitude\":22.3399579,\"longitude\":114.2632457,\"speed\":0.3}},{\"timestamp\":\"2026-08-29T16:10:05.000Z\",\"coords\":{\"latitude\":22.3399601,\"longitude\":114.2632480},\"sample\":true}]}"
+```
+```bat
+curl http://localhost:8000/ingest/<batch_id from the response above>
+curl http://localhost:8000/exposure/hourly/demo-merge
 ```
 
-**GET /exposure/hourly/{pid}** - returns one row per (hour, indoor/outdoor),
-ready to feed directly into a stacked bar chart. A dwell run that crosses an
-hour boundary (e.g. indoor from 16:45-17:15) is classified once over its true
-duration and then split into same-labelled rows per hour touched, each with
-its own prorated `delta_t_hours` (here, two Indoor rows: 0.25h in hour 16 and
-0.25h in hour 17) - not reclassified per hour, which would otherwise
-mislabel both partial pieces as Outdoor:
-
-```bash
-curl http://localhost:8000/exposure/hourly/local-device
+Why one row: 3 pings went in, but the 3rd has `sample: true` so it's
+dropped entirely - that leaves 2. Those 2 are at the identical
+coordinates, 10 minutes apart, and the second one's `speed` (0.3 m/s) is
+under the 1.0 m/s threshold, so it counts as "still at the same spot" -
+they merge into a single run. 10 minutes is nowhere near the 20-minute
+indoor cutoff, so it's labelled `"Outdoor"`. Both timestamps fall in the
+same HK-local hour, so there's nothing to split either. Result:
+`hours_processed: 1, rows: 1`, and the one row back from
+`/exposure/hourly/demo-merge` looks like:
+```json
+[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "delta_t_hours": 0.1667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579}]
 ```
 
+#### 2. Two separate stops, same hour → **two** rows
+
+```bat
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\": \"demo-split\", \"features\": [{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:00:00.000Z\",\"speed\":0.1},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"timestamp\":\"2026-08-29T16:05:00.000Z\",\"coords\":{\"latitude\":22.3399579,\"longitude\":114.2632457,\"speed\":0.2}},{\"timestamp\":\"2026-08-29T16:10:00.000Z\",\"coords\":{\"latitude\":22.3399579,\"longitude\":114.2650000,\"speed\":0.3}},{\"timestamp\":\"2026-08-29T16:15:00.000Z\",\"coords\":{\"latitude\":22.3399579,\"longitude\":114.2650000,\"speed\":0.1}}]}"
+```
+```bat
+curl http://localhost:8000/ingest/<batch_id from the response above>
+curl http://localhost:8000/exposure/hourly/demo-split
+```
+
+Why two rows: the first 2 pings are at one spot (`lng 114.2632457`), the
+last 2 are at a different spot roughly 175m away (`lng 114.2650000`) -
+that's well past the ~20m "same location" box, so ping 3 starts a *new*
+run instead of joining the first one. Both runs are under 20 minutes, so
+both are `"Outdoor"`, and both still land in the same HK-local hour - this
+is exactly the case the DB schema is keyed for: two rows sharing one
+`hour_start_hk`, distinguished by `start_time_hk`:
 ```json
 [
-  {"hour_start_hk": "20260830000000", "io": "Outdoor", "delta_t_hours": 0.04, "exposure_value": 0.02, "lng": 114.2632457, "lat": 22.3399579},
-  {"hour_start_hk": "20260830000000", "io": "Indoor",  "delta_t_hours": 0.9,  "exposure_value": 0.31, "lng": 114.2632457, "lat": 22.3399579}
+  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "delta_t_hours": 0.0833, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579},
+  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830001000", "io": "Outdoor", "delta_t_hours": 0.0833, "exposure_value": <live value>, "lng": 114.2650000, "lat": 22.3399579}
 ]
 ```
 
-`lng`/`lat` are the dwell run's reference point (its first ping - see
-`find_dwell_runs` in `etl.py`). If more than one same-labelled run lands in
-the same hour, the row's `(pid, hour_start_hk, io)` primary key means only
-the last-processed run's coordinates are kept, not an average of all of them.
+#### 3. Dwelling 25 minutes in one spot → **Indoor**, collapsed to one point
+
+```bat
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\": \"demo-indoor\", \"features\": [{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"timestamp\":\"2026-08-29T16:10:00.000Z\",\"coords\":{\"latitude\":22.3399650,\"longitude\":114.2633000,\"speed\":0.1}},{\"timestamp\":\"2026-08-29T16:25:00.000Z\",\"coords\":{\"latitude\":22.3399500,\"longitude\":114.2632200,\"speed\":0.05}}]}"
+```
+```bat
+curl http://localhost:8000/ingest/<batch_id from the response above>
+curl http://localhost:8000/exposure/hourly/demo-indoor
+```
+
+Why Indoor, and why that exact `lng`/`lat`: all 3 pings drift a little
+(a few meters) but stay within the ~20m box of the *first* ping, and each
+step is slow enough, so all 3 merge into one run spanning 16:00-16:25 -
+25 minutes, past the 20-minute indoor cutoff. Because it's Indoor, the row
+is represented by that first ping's exact coordinates (`114.2632457,
+22.3399579`), not the average of all 3 (which would be a slightly
+different point) - the whole point of collapsing an indoor dwell to its
+anchor point instead of averaging:
+```json
+[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Indoor", "delta_t_hours": 0.4167, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579}]
+```
+(Internally, this row's request to `expo_calx` used `{"IO": "Home"}` -
+`expo_calx` doesn't accept `"Indoor"` itself. That translation only
+happens on the outgoing request and isn't visible in any response here.)
+
+### Request/response reference
+
+**`POST /ingest`** body:
+
+| field | type | required | notes |
+|---|---|---|---|
+| `pid` | string | yes | person/device id; keys every downstream row |
+| `features` | array of objects | yes | raw ping records - two shapes accepted, detected per-record by whether it has a `geometry` key, so **they can be mixed in one batch** |
+
+Shape A - GeoJSON `Feature` (watch-exported data):
+
+| field | required | read by the pipeline? |
+|---|---|---|
+| `properties.time` (ISO 8601 UTC) | yes | yes - ping timestamp |
+| `geometry.coordinates` (`[lng, lat]`) | yes | yes - position |
+| `properties.speed` (m/s) | no | yes, if present - indoor/outdoor speed check |
+| `.provider`, `.time_long`, `.accuracy`, `.altitude`, `.bearing` | no | no - accepted, ignored |
+
+Shape B - live device tracking (`react-native-background-geolocation`-style):
+
+| field | required | read by the pipeline? |
+|---|---|---|
+| `timestamp` (ISO 8601 UTC) | yes | yes - ping timestamp |
+| `coords.latitude` / `coords.longitude` | yes | yes - position |
+| `coords.speed` (m/s) | no | yes, if present. `-1` or any negative value (that library's "unknown" convention) is treated as absent |
+| `sample` (boolean) | no | yes - `true` means "transient reading"; the record is **dropped entirely** |
+| `mock` (boolean) | no | no - `true` (fake-GPS) records are kept as-is; the flag itself isn't read |
+| other `coords.*` fields | no | no - accepted, ignored |
+
+Response: `202 {"status": "queued", "batch_id": <int>}` immediately;
+processing runs afterward in the background. Errors: `400 {"detail": "no
+valid pings in request"}` if `features` parses to zero pings.
+
+Bulk-importing a whole watch-exported GeoJSON file (e.g. one of the
+fixtures in `testing/data/`) works the same way - lift its `features`
+array into the request body. That needs `jq` and `$(...)` substitution
+(PowerShell or git-bash; `cmd.exe` has neither):
+```bash
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\": \"local-device\", \"features\": $(jq '.features' testing/data/20260830.geojson)}"
+```
+
+**`GET /ingest/{batch_id}`** - poll for the background job's completion
+(not needed for the auto-resume case: a batch still
+`queued`/`processing` when the server restarts is picked back up on
+startup automatically). `batch_id` comes from the `POST /ingest` response.
+Errors: `404` if it doesn't exist. Response fields:
+
+| field | type | notes |
+|---|---|---|
+| `id` | int | the `batch_id` |
+| `pid` | string | |
+| `status` | string | `queued` \| `processing` \| `done` \| `error` |
+| `error_detail` | string or `null` | only set when `status` is `error` |
+| `hours_processed` | int or `null` | distinct hour buckets touched; set once `done` |
+| `rows` | int or `null` | rows sent to `expo_calx`; set once `done` |
+| `created_at` / `updated_at` | ISO 8601 string (UTC) | |
+
+**`GET /exposure/hourly/{pid}`** - two consumers read this array: (a) a
+**stacked bar chart**, by summing `delta_t_hours`/`exposure_value` across
+rows sharing an `hour_start_hk`+`io`, and (b) a **map route**, by plotting
+each row's `lng`/`lat` in `start_time_hk` order. More than one row can
+share an `hour_start_hk`+`io` (scenario 2 above) - each row is one dwell
+run, or one hour-slice of a run that crosses an hour boundary, keyed by
+`(pid, io, start_time_hk)`. Response fields:
+
+| field | type | notes |
+|---|---|---|
+| `hour_start_hk` | string `'YYYYMMDDHH0000'`, HK-local | hour bucket - group by this (+ `io`) for the chart |
+| `start_time_hk` | string `'YYYYMMDDHHMMSS'`, HK-local | this run's own precise start; unique per `(pid, io)` - sort by this for the route |
+| `io` | string | `"Indoor"` \| `"Outdoor"` |
+| `delta_t_hours` | number | duration of this row's slice, hours |
+| `exposure_value` | number or `null` | `null` if `expo_calx` returned `-9` (that row failed) |
+| `lng` / `lat` | number | Outdoor: average of the run's pings. Indoor: the run's anchor (its first ping) |
 
 ## Local network testing (RN app on a device/emulator)
 
@@ -103,14 +225,15 @@ ever tested from a browser context (e.g. Expo web).
 All thresholds live at the top of `etl.py`:
 
 - `SPIKE_ANGLE_DEG` / `SPIKE_TIME_WINDOW_SECONDS` - GPS spike rejection.
-- `DWELL_INDOOR_MINUTES` / `DWELL_RADIUS_METERS` - indoor/outdoor dwell test.
+- `DWELL_INDOOR_MINUTES` / `DWELL_DEGREE_THRESHOLD` / `SPEED_THRESHOLD_MPS` -
+  indoor/outdoor dwell test.
 
 ## Known simplifications (fine for a v1, revisit if needed)
 
-- `/ingest` calls `expo_calx` synchronously in the request. If a user's
-  daily batch is large enough to make this slow, split it into "write raw
-  pings, return immediately" plus a background worker that does the ETL +
-  API call - `etl.py`, `praise_client.py`, and `db.py` don't need to change.
 - No retry on network failure, matching the documented API behavior.
 - Dwell-run detection uses a fixed reference point (the run's first ping);
   a slowly drifting walk could split into more runs than ideal.
+- `DWELL_DEGREE_THRESHOLD` is a flat degree box applied identically to lat
+  and lng, with no correction for longitude compression at higher
+  latitudes - simpler than haversine, at the cost of the east-west tolerance
+  being slightly tighter in real meters than the north-south one.
