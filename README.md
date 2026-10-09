@@ -222,11 +222,21 @@ ever tested from a browser context (e.g. Expo web).
 
 ## Tuning
 
-All thresholds live at the top of `etl.py`:
+All output-shaping thresholds live in `config.py`:
 
 - `SPIKE_ANGLE_DEG` / `SPIKE_TIME_WINDOW_SECONDS` - GPS spike rejection.
 - `DWELL_INDOOR_MINUTES` / `DWELL_DEGREE_THRESHOLD` / `SPEED_THRESHOLD_MPS` -
   indoor/outdoor dwell test.
+- `TRAIL_DOT_DEGREE_THRESHOLD` / `TRAIL_DOT_MAX_SECONDS` - outdoor trail
+  thinning: a moving trail keeps a dot once it leaves a ~300m lat/lng box
+  (0.0027 deg) of the previous dot, or after 300s, whichever comes first.
+  Lower values = denser track, more rows and `expo_calx` calls; higher =
+  sparser.
+- `MAX_GAP_METERS` / `MAX_GAP_SECONDS` - where a trail breaks (GPS dropout or
+  jump), so simplification never smooths across a real gap.
+
+`etl.py`'s `HK_OFFSET`/`_API_IO_LABEL` and `praise_client.py`'s API-only
+constants aren't sweep tunables and stay defined in their own files.
 
 ## Known simplifications (fine for a v1, revisit if needed)
 
@@ -237,3 +247,7 @@ All thresholds live at the top of `etl.py`:
   and lng, with no correction for longitude compression at higher
   latitudes - simpler than haversine, at the cost of the east-west tolerance
   being slightly tighter in real meters than the north-south one.
+- A genuinely-indoor dwell and an outdoor stationary wait of the same
+  duration (e.g. waiting for a bus) are indistinguishable by dwell
+  duration/box/speed alone - tuning `DWELL_INDOOR_MINUTES` etc. is a
+  mitigation, not a structural fix.

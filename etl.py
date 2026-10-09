@@ -11,45 +11,28 @@ Order of operations (matches the agreed design):
      means a dwell run that straddles an hour boundary is judged by its true
      total duration, not by whichever partial slice happens to land in one
      clock hour.
-  4. Slice each labelled run at HK-local clock-hour boundaries, carrying the
+  4. Thin each continuous Outdoor trail to roughly one dot per lat/lng box
+     (or per max time span, see config.TRAIL_DOT_*): 1Hz tracking while
+     moving otherwise yields one run per ping.
+  5. Slice each labelled run at HK-local clock-hour boundaries, carrying the
      run's io label into every hour it touches (and prorating delta_t).
-  5. Build one [t, pid, lng, lat, x, delta_t] row per (hour, IO segment).
+  6. Build one [t, pid, lng, lat, x, delta_t] row per (hour, IO segment).
 
-Tunable constants are at the top - adjust these to match your device's
-ping rate and walking speed rather than editing the logic below.
+Tunable constants (other than HK_OFFSET) now live in config.py - adjust
+values there rather than editing the logic below.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone, timedelta
 from typing import List, Literal, Dict, Any, Optional
 import math
 
+try:
+    from . import config
+except ImportError:  # imported as a bare top-level module (e.g. testing.ipynb)
+    import config
+
 HK_OFFSET = timedelta(hours=8)
-
-# --- Spike filter tuning ---
-SPIKE_ANGLE_DEG = 20.0          # angle at B below this = suspected spike
-SPIKE_TIME_WINDOW_SECONDS = 120  # only flag as a spike if A->C happened this fast
-
-# --- Indoor/outdoor dwell tuning ---
-DWELL_INDOOR_MINUTES = 20       # a stationary run at least this long = indoor
-
-# Degree-based "same location" tolerance for GPS drift, deliberately used
-# instead of a haversine distance so the check is a plain lat/lng delta
-# comparison. 0.0001 deg of lat/lng is ~11.1m, so ~0.00018 deg is ~20m - loose
-# enough to absorb typical indoor GPS drift (consumer GPS horizontal accuracy
-# is commonly 5-20m, worse indoors from multipath), tight enough not to merge
-# genuinely separate stops. Applied as a flat box on both lat and lng, with
-# no per-latitude correction for longitude compression.
-DWELL_DEGREE_THRESHOLD = 0.00018
-
-# A point only counts as part of the same stationary run if its own reported
-# speed (when the device provides one - many raw pings don't) is below this.
-# ~1.0 m/s (~3.6 km/h) is a brisk-walk cutoff: comfortably separates indoor
-# puttering (getting up, pacing a room) from real outdoor travel (walking
-# commute is usually 1.2 m/s+, any transit mode faster still), without
-# rejecting legitimate slow indoor movement. A missing speed reading doesn't
-# block a point from joining the run - only a reported *fast* speed does.
-SPEED_THRESHOLD_MPS = 1.0
 
 IoLabel = Literal["Indoor", "Outdoor"]
 
@@ -142,8 +125,8 @@ def _angle_at_b_deg(a: Ping, b: Ping, c: Ping) -> float:
 
 def remove_spike_outliers(pings: List[Ping]) -> List[Ping]:
     """Delete point B from any triple A,B,C where the path sharply doubles back
-    (angle at B < SPIKE_ANGLE_DEG) within SPIKE_TIME_WINDOW_SECONDS. Re-scans
-    after each deletion since removing B changes the next triple to check."""
+    (angle at B < config.SPIKE_ANGLE_DEG) within config.SPIKE_TIME_WINDOW_SECONDS.
+    Re-scans after each deletion since removing B changes the next triple to check."""
     cleaned = list(pings)
     changed = True
     while changed:
@@ -152,7 +135,7 @@ def remove_spike_outliers(pings: List[Ping]) -> List[Ping]:
         while i < len(cleaned) - 1:
             a, b, c = cleaned[i - 1], cleaned[i], cleaned[i + 1]
             span = (c.utc - a.utc).total_seconds()
-            if span <= SPIKE_TIME_WINDOW_SECONDS and _angle_at_b_deg(a, b, c) < SPIKE_ANGLE_DEG:
+            if span <= config.SPIKE_TIME_WINDOW_SECONDS and _angle_at_b_deg(a, b, c) < config.SPIKE_ANGLE_DEG:
                 del cleaned[i]
                 changed = True
                 continue
@@ -167,23 +150,27 @@ def _to_hk(dt_utc: datetime) -> datetime:
 
 def _within_dwell_box(ref: Ping, p: Ping) -> bool:
     return (
-        abs(p.lat - ref.lat) <= DWELL_DEGREE_THRESHOLD
-        and abs(p.lng - ref.lng) <= DWELL_DEGREE_THRESHOLD
+        abs(p.lat - ref.lat) <= config.DWELL_DEGREE_THRESHOLD
+        and abs(p.lng - ref.lng) <= config.DWELL_DEGREE_THRESHOLD
     )
 
 
 def _is_slow_enough(p: Ping) -> bool:
-    return p.speed_mps is None or p.speed_mps < SPEED_THRESHOLD_MPS
+    return p.speed_mps is None or p.speed_mps < config.SPEED_THRESHOLD_MPS
 
 
 def find_dwell_runs(pings: List[Ping]) -> List[DwellRun]:
     """Split the full, continuous ping stream into indoor/outdoor runs by dwell time.
 
     A "run" is a maximal sequence of consecutive points that all stay within
-    DWELL_DEGREE_THRESHOLD (a flat lat/lng box, not haversine) of the run's
-    first point AND report a speed below SPEED_THRESHOLD_MPS (points with no
-    speed reading are judged on distance alone). If the run's total duration
-    clears DWELL_INDOOR_MINUTES, it's labelled Indoor; otherwise Outdoor.
+    config.DWELL_DEGREE_THRESHOLD (a flat lat/lng box, not haversine) of the
+    run's first point AND report a speed below config.SPEED_THRESHOLD_MPS
+    (points with no speed reading are judged on distance alone). If the run's
+    total duration clears config.DWELL_INDOOR_MINUTES, it's labelled Indoor;
+    otherwise Outdoor. A genuinely-indoor stop and an outdoor wait of the same
+    duration (e.g. waiting for a bus) are indistinguishable by this signal
+    alone - tuning these three config.py values is the only lever, not a
+    structural fix (documented known limitation).
     Note: the very last run has no further point to bound its end, so its
     duration is computed up to its own last ping only.
     """
@@ -197,7 +184,7 @@ def find_dwell_runs(pings: List[Ping]) -> List[DwellRun]:
             return
         start_utc = run[0].utc
         duration_min = max(0.0, (end_time_utc - start_utc).total_seconds() / 60.0)
-        io: IoLabel = "Indoor" if duration_min >= DWELL_INDOOR_MINUTES else "Outdoor"
+        io: IoLabel = "Indoor" if duration_min >= config.DWELL_INDOOR_MINUTES else "Outdoor"
         if io == "Indoor":
             # Collapse the whole dwell to its anchor point - GPS drift while
             # stationary indoors shouldn't be treated as distinct locations.
@@ -225,6 +212,81 @@ def find_dwell_runs(pings: List[Ping]) -> List[DwellRun]:
             run = [p]
     flush(run, pings[-1].utc)
     return runs
+
+
+def _xy_meters(lng: float, lat: float, origin_lng: float, origin_lat: float) -> tuple:
+    """Local flat-earth projection around the origin (same as _angle_at_b_deg's)."""
+    x = math.radians(lng - origin_lng) * math.cos(math.radians(origin_lat)) * 6371000.0
+    y = math.radians(lat - origin_lat) * 6371000.0
+    return x, y
+
+
+def _meters_between(a: DwellRun, b: DwellRun) -> float:
+    return math.hypot(*_xy_meters(b.lng, b.lat, a.lng, a.lat))
+
+
+def _is_trail_continuation(prev: DwellRun, curr: DwellRun) -> bool:
+    """True if curr continues the same continuous Outdoor trail as prev. A
+    long prev run (its end is the next ping's time, so this means a GPS
+    dropout) or a big jump between the two points breaks the trail."""
+    return (
+        prev.io == "Outdoor"
+        and curr.io == "Outdoor"
+        and (prev.end_utc - prev.start_utc).total_seconds() <= config.MAX_GAP_SECONDS
+        and _meters_between(prev, curr) <= config.MAX_GAP_METERS
+    )
+
+
+def _trail_dot_keep(trail: List[DwellRun]) -> List[int]:
+    """Indices of trail points to keep. Starting from the last kept point,
+    a point is dropped while it stays inside a config.TRAIL_DOT_DEGREE_THRESHOLD
+    lat/lng box of it AND less than config.TRAIL_DOT_MAX_SECONDS have passed;
+    the first point breaking either condition is kept and becomes the new
+    reference. The trail's last point gets no special treatment: forcing it
+    in left near-duplicate dots at every trail end, and if it is dropped its
+    time folds into a kept dot at most one box away."""
+    keep = [0]
+    ref = trail[0]
+    for m in range(1, len(trail)):
+        p = trail[m]
+        if (
+            abs(p.lat - ref.lat) > config.TRAIL_DOT_DEGREE_THRESHOLD
+            or abs(p.lng - ref.lng) > config.TRAIL_DOT_DEGREE_THRESHOLD
+            or (p.start_utc - ref.start_utc).total_seconds() >= config.TRAIL_DOT_MAX_SECONDS
+        ):
+            keep.append(m)
+            ref = p
+    return keep
+
+
+def simplify_outdoor_trails(runs: List[DwellRun]) -> List[DwellRun]:
+    """Thin each continuous Outdoor trail down to its shape-defining points.
+
+    While moving, 1Hz tracking makes nearly every ping its own ~1-second
+    Outdoor run (it leaves find_dwell_runs's dwell box immediately), which
+    floods expo_calx with rows and the app's map with dots. Consecutive
+    Outdoor runs are grouped into trails (see _is_trail_continuation), each
+    trail is reduced with _trail_dot_keep, and every kept point becomes
+    one run at its own position, extended to cover the time of the dropped
+    points after it - total time is preserved exactly. Indoor runs pass
+    through untouched.
+    """
+    out: List[DwellRun] = []
+    i, n = 0, len(runs)
+    while i < n:
+        if runs[i].io != "Outdoor":
+            out.append(runs[i])
+            i += 1
+            continue
+        j = i + 1
+        while j < n and _is_trail_continuation(runs[j - 1], runs[j]):
+            j += 1
+        trail = runs[i:j]
+        kept = _trail_dot_keep(trail)
+        for a, b in zip(kept, kept[1:] + [len(trail)]):
+            out.append(replace(trail[a], end_utc=trail[b - 1].end_utc))
+        i = j
+    return out
 
 
 def split_by_hour(runs: List[DwellRun]) -> List[IoSegment]:

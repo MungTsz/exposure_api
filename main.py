@@ -23,13 +23,6 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Exposure ETL backend")
 
-# A dense batch (esp. continuous Outdoor movement, where find_dwell_runs
-# emits ~one short run per ping since its box is anchored to each run's
-# first point) can produce far more rows than the app's chart needs to
-# render and causes it to lag. Collapse every full run of this many
-# consecutive same-io rows into one before storing - see _merge_dense_rows.
-DENSE_MERGE_CHUNK_SIZE = 100
-
 
 @app.on_event("startup")
 def on_startup() -> None:
@@ -62,62 +55,6 @@ def ingest(req: IngestRequest, background_tasks: BackgroundTasks) -> Dict[str, A
     return {"status": "queued", "batch_id": batch_id}
 
 
-def _merge_chunk(chunk: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Collapse one full chunk of same-io db rows into a single summary row,
-    anchored on the chunk's *last* row (position, hour, and start time)."""
-    last = chunk[-1]
-    values = [r["exposure_value"] for r in chunk if r["exposure_value"] is not None]
-    return {
-        "pid": last["pid"],
-        "hour_start_hk": last["hour_start_hk"],
-        "start_time_hk": last["start_time_hk"],
-        "io": last["io"],
-        "delta_t_hours": sum(r["delta_t_hours"] for r in chunk),
-        # None only if every row in the chunk failed to score - never
-        # manufacture a 0, since None means "unscored," not "no exposure."
-        "exposure_value": sum(values) if values else None,
-        "lng": last["lng"],
-        "lat": last["lat"],
-    }
-
-
-def _merge_dense_rows(
-    rows: List[Dict[str, Any]], chunk_size: int = DENSE_MERGE_CHUNK_SIZE
-) -> List[Dict[str, Any]]:
-    """Collapse every full run of `chunk_size` consecutive same-io rows into
-    one summary row, to cap how many points a single dense (e.g. constantly
-    moving Outdoor) stretch can push into storage/the chart.
-
-    `rows` must already be in chronological (start_time_hk-ascending) order,
-    which is true of the db-row list built from `segments` in
-    `_process_batch`. Grouping is purely by (position in the chronological
-    sequence, io label) and deliberately ignores hour_start_hk, so a merged
-    row can pull summed time from an earlier hour into whichever hour its
-    last constituent row falls in - accepted so a 100-row window always
-    merges the same way regardless of where hour boundaries happen to fall.
-
-    A same-io streak shorter than `chunk_size` (including the leftover tail
-    after full chunks) is left as individual rows - merging only kicks in
-    once a streak actually reaches the threshold.
-    """
-    merged: List[Dict[str, Any]] = []
-    i, n = 0, len(rows)
-    while i < n:
-        io = rows[i]["io"]
-        j = i
-        while j < n and rows[j]["io"] == io:
-            j += 1
-        streak = rows[i:j]
-        for k in range(0, len(streak), chunk_size):
-            chunk = streak[k : k + chunk_size]
-            if len(chunk) == chunk_size:
-                merged.append(_merge_chunk(chunk))
-            else:
-                merged.extend(chunk)
-        i = j
-    return merged
-
-
 def _process_batch(batch_id: int, pid: str, features: List[Dict[str, Any]]) -> None:
     db.mark_processing(batch_id)
     logger.info("batch=%d pid=%s processing %d raw features", batch_id, pid, len(features))
@@ -131,9 +68,14 @@ def _process_batch(batch_id: int, pid: str, features: List[Dict[str, Any]]) -> N
         batch_id, pid, len(cleaned), len(pings) - len(cleaned),
     )
 
-    runs = etl.find_dwell_runs(cleaned)
+    dwell_runs = etl.find_dwell_runs(cleaned)
+    runs = etl.simplify_outdoor_trails(dwell_runs)
+    logger.info(
+        "batch=%d pid=%s %d dwell runs -> %d after outdoor trail simplification",
+        batch_id, pid, len(dwell_runs), len(runs),
+    )
     segments = [s for s in etl.split_by_hour(runs) if s.delta_t_hours > 0]
-    logger.info("batch=%d pid=%s %d dwell runs -> %d hourly segments", batch_id, pid, len(runs), len(segments))
+    logger.info("batch=%d pid=%s %d runs -> %d hourly segments", batch_id, pid, len(runs), len(segments))
 
     rows = etl.to_request_rows(pid, segments)
     if not rows:
@@ -182,12 +124,7 @@ def _process_batch(batch_id: int, pid: str, features: List[Dict[str, Any]]) -> N
                 "lat": seg.lat,
             }
         )
-    merged_rows = _merge_dense_rows(db_rows)
-    logger.info(
-        "batch=%d pid=%s merged %d rows into %d after dense-run collapsing",
-        batch_id, pid, len(db_rows), len(merged_rows),
-    )
-    db.upsert_hourly(merged_rows)
+    db.upsert_hourly(db_rows)
 
     hours_processed = len({seg.hour_start_hk for seg in segments})
     logger.info("batch=%d pid=%s ingest complete: hours_processed=%d rows=%d", batch_id, pid, hours_processed, len(rows))
