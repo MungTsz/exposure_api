@@ -43,7 +43,7 @@ def test_ingest_then_read_hourly(client, monkeypatch):
 
     rows = client.get("/exposure/hourly/p1").json()
     assert rows == [{
-        "hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": io_cfg.INDOOR_NAME,
+        "hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": io_cfg.HOME_NAME,
         "delta_t_hours": INDOOR_SECONDS / 3600, "exposure_value": 2.5, "lng": 114.158, "lat": 22.282,
         "in_hk": True,
     }]

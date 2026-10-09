@@ -14,13 +14,16 @@ from typing import Dict, List
 
 from app.etl.models import Stay
 from app.io_types.base import IoType
-from app.io_types.rules.indoor import INDOOR
+from app.io_types.rules.home import HOME
+from app.io_types.rules.other_indoor import OTHER_INDOOR
 from app.io_types.rules.outdoor import OUTDOOR
 
 # Priority order: a stay gets the first io type whose rule matches it.
+# OTHER_INDOOR matches every indoor stay, so HOME must come before it.
 # OUTDOOR matches everything, so it must stay last.
 IO_TYPES: List[IoType] = [
-    INDOOR,
+    HOME,
+    OTHER_INDOOR,
     OUTDOOR,
 ]
 

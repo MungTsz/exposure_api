@@ -11,7 +11,7 @@ class IoKind(str, Enum):
     """Decides how the pipeline treats a stay of this io type, so no
     pipeline code ever checks for a specific io name."""
 
-    # Not moving (Indoor, Office, ...): the stay is placed at its first
+    # Not moving (Home, Other Indoor, Office, ...): the stay is placed at its first
     # ping, since GPS drift while staying put shouldn't read as distinct
     # locations.
     STATIONARY = "stationary"

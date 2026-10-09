@@ -4,7 +4,7 @@ from dataclasses import replace
 from typing import List
 
 from app.config import pipeline as cfg
-from app.etl.geo import meters_between, within_degree_box
+from app.etl.geo import manhattan_degrees, within_degree_box
 from app.etl.models import Stay
 from app.io_types import registry
 from app.io_types.base import IoKind
@@ -17,12 +17,13 @@ def _is_moving(stay: Stay) -> bool:
 def _continues_route(prev: Stay, curr: Stay) -> bool:
     """True if curr continues the same route as prev: both moving with the
     same io type, no GPS dropout (prev lasting longer than MAX_GAP_SECONDS -
-    its end is the next ping's time) and no big jump between them."""
+    its end is the next ping's time) and no big jump between them
+    (|dlat| + |dlng| above MAX_GAP_DEGREES)."""
     return (
         prev.io == curr.io
         and _is_moving(prev)
         and prev.duration_seconds <= cfg.MAX_GAP_SECONDS
-        and meters_between(prev, curr) <= cfg.MAX_GAP_METERS
+        and manhattan_degrees(prev, curr) <= cfg.MAX_GAP_DEGREES
     )
 
 

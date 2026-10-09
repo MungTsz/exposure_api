@@ -45,13 +45,13 @@ def test_pipeline_matches_golden(golden_path):
 
 
 def test_20260830_row_and_call_counts():
-    """Documented figures for the densest sample day: 262 rows, 7 API calls of 40."""
+    """Documented figures for the densest sample day: 270 rows, 7 API calls of 40."""
     sample = SAMPLES_DIR / "20260830.geojson"
     if not sample.exists():
         pytest.skip("20260830.geojson not present in this checkout")
     features = json.loads(sample.read_text(encoding="utf-8"))["features"]
     rows = to_request_rows(GOLDEN_PID, run_pipeline(features).slices)
-    assert len(rows) == 262
+    assert len(rows) == 270
     assert -(-len(rows) // 40) == 7
 
 

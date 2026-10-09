@@ -57,10 +57,28 @@ def test_fast_ping_starts_new_stay():
 
 # --- io types ---
 
-def test_long_stay_is_indoor_at_first_ping():
+def test_long_night_stay_is_home_at_first_ping():
     stays = registry.label_stays(group_into_stays([ping(0), ping(INDOOR_SECONDS, lng=114.0001)]))
-    assert stays[0].io == io_cfg.INDOOR_NAME
+    assert stays[0].io == io_cfg.HOME_NAME
     assert (stays[0].lng, stays[0].lat) == (114.0, 22.0)
+
+
+HOUR = 3600
+
+
+@pytest.mark.parametrize("start_hk_hour", [6, 12, 23])
+def test_long_stay_outside_home_hours_is_other_indoor(start_hk_hour):
+    start = start_hk_hour * HOUR
+    stays = registry.label_stays(group_into_stays([ping(start), ping(start + INDOOR_SECONDS)]))
+    assert stays[0].io == io_cfg.OTHER_INDOOR_NAME
+    assert (stays[0].lng, stays[0].lat) == (114.0, 22.0)
+
+
+def test_home_is_decided_by_stay_start():
+    start = io_cfg.HOME_END_HOUR_HK * HOUR - 10 * 60  # 05:50 HK, lasts past 06:00
+    stays = registry.label_stays(group_into_stays([ping(start), ping(start + INDOOR_SECONDS)]))
+    assert stays[0].io == io_cfg.HOME_NAME
+    assert {s.io for s in split_by_hour(stays)} == {io_cfg.HOME_NAME}
 
 
 def test_short_stay_is_outdoor_at_average():
@@ -106,13 +124,20 @@ def test_stay_crossing_hours_is_split_and_prorated():
     stays = registry.label_stays(group_into_stays([ping(30 * 60), ping(150 * 60)]))  # 00:30-02:30 HK
     slices = split_by_hour(stays)
     assert [s.delta_t_hours for s in slices] == [0.5, 1.0, 0.5]
-    assert {s.io for s in slices} == {io_cfg.INDOOR_NAME}
+    assert {s.io for s in slices} == {io_cfg.HOME_NAME}
 
 
 def test_request_rows_use_api_label():
     stays = registry.label_stays(group_into_stays([ping(0), ping(INDOOR_SECONDS)]))
     rows = to_request_rows("p1", split_by_hour(stays))
-    assert rows == [["20260830000000", "p1", 114.0, 22.0, {"IO": io_cfg.INDOOR_API_LABEL}, 0.333333]]
+    assert rows == [["20260830000000", "p1", 114.0, 22.0, {"IO": io_cfg.HOME_API_LABEL}, 0.333333]]
+
+
+def test_other_indoor_request_row_label():
+    start = 12 * HOUR
+    stays = registry.label_stays(group_into_stays([ping(start), ping(start + INDOOR_SECONDS)]))
+    (row,) = to_request_rows("p1", split_by_hour(stays))
+    assert row[4] == {"IO": io_cfg.OTHER_INDOOR_API_LABEL}
 
 
 # --- Hong Kong region ---

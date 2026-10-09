@@ -2,7 +2,7 @@
 
 Takes raw watch/phone GPS pings from the RN app, cleans and classifies them,
 calls the third-party `expo_calx` exposure API, and stores per-hour results
-per io type (Indoor, Outdoor, ...) for the app's bar chart and map.
+per io type (Home, Other Indoor, Outdoor, ...) for the app's bar chart and map.
 `expo_calx` only covers Hong Kong, so points outside HK are returned with
 `in_hk: false` and no exposure value.
 
@@ -65,7 +65,7 @@ app/
   io_types/               which io type a stay gets
     registry.py             the ordered list of io types + classify/label
     base.py                 IoType definition (name, api_label, kind, rule)
-    rules/                  one module per io type (indoor.py, outdoor.py)
+    rules/                  one module per io type (home.py, other_indoor.py, outdoor.py)
   clients/praise_client.py  expo_calx HTTP client (parallel calls, capped)
   db/                     SQLite: connection/schema + one repository per table
 docs/API.md               API documentation for app developers
@@ -83,7 +83,7 @@ Terms used throughout the code:
 | **ping** | one GPS point |
 | **spike** | a single bad point where GPS jumps away and straight back |
 | **stay** | consecutive pings that stay inside a small box and move slowly - where the person stayed, and for how long. While moving, each ping usually becomes its own very short stay |
-| **io type** | what kind of place a stay is: `Indoor`, `Outdoor`, later `Office`, `Bus`, ... |
+| **io type** | what kind of place a stay is: `Home`, `Other Indoor`, `Outdoor`, later `Office`, `Bus`, ... |
 | **route** | consecutive moving stays of the same io type |
 | **route point** | a stay kept after thinning a route |
 | **hourly slice** | the part of a stay inside one HK-local clock hour; one DB row each, and one expo_calx row if inside Hong Kong |
@@ -93,20 +93,20 @@ Steps (`app/etl/pipeline.py`):
 1. **Parse** raw records into time-sorted pings.
 2. **Remove spikes**: drop point B of any A,B,C where the path sharply doubles back within a short time.
 3. **Group into stays**: a stay continues while each ping is within a ~20m box of the stay's first ping and its speed (if reported) is below 1 m/s.
-4. **Label stays** with an io type: the first io type (in `app/io_types/registry.py` order) whose rule matches wins. Today: a stay of 20+ minutes is `Indoor`, anything else `Outdoor`. Labelling happens before the hour split, so a stay crossing an hour is judged by its full duration.
+4. **Label stays** with an io type: the first io type (in `app/io_types/registry.py` order) whose rule matches wins. Today: a stay of 20+ minutes is indoor - `Home` if it starts between 00:00 and 06:00 HK time (06:00 not included), otherwise `Other Indoor` - and anything else is `Outdoor`. Only the stay's start time counts, so a stay from 05:50 to 08:00 is `Home` as a whole. Labelling happens before the hour split, so a stay crossing an hour is judged by its full duration.
 5. **Simplify routes**: while moving, 1 Hz tracking makes one stay per ping. Each route keeps roughly one point per ~300m (or per 5 min); the dropped points' time is added to the kept point before them, so total time is unchanged. Routes break at GPS gaps (>120s or >200m).
 6. **Split by hour**: cut each stay at HK-local clock hours, because expo_calx scores each row against that hour's AQHI reading.
 7. **Mark Hong Kong**: flag each hourly slice `in_hk` by testing its position against a simplified HK outline (`HK_BOUNDARY` in `app/config/constants.py`): a bounding-box check, then point-in-polygon.
 8. **Score**: send only the in-HK rows to expo_calx, 40 rows per call, up to 10 calls at once (shared by all batches), and store one DB row per hourly slice. Slices outside HK are stored with `in_hk = 0` and no exposure value.
 
 Where a stay is placed depends on its io type's `kind`:
-- `stationary` (Indoor): at its first ping, so GPS drift doesn't move it.
+- `stationary` (Home, Other Indoor): at its first ping, so GPS drift doesn't move it.
 - `moving` (Outdoor): at the average of its pings, and its routes are thinned (step 5).
 
 ## Adding an io type (e.g. Office, Bus)
 
 1. `app/config/io_types.py`: add a section with `<TYPE>_NAME` (stored in the DB and shown in the app), `<TYPE>_API_LABEL` (the value expo_calx expects) and any thresholds its rule needs.
-2. `app/io_types/rules/<type>.py`: define an `IoType` with its `kind` (`STATIONARY` or `MOVING`) and a `matches(stay)` function. A stay carries its `pings` (time, lng, lat, speed) and duration; use `app/etl/geo.py` for distance or box checks. `rules/indoor.py` is a minimal example.
+2. `app/io_types/rules/<type>.py`: define an `IoType` with its `kind` (`STATIONARY` or `MOVING`) and a `matches(stay)` function. A stay carries its `pings` (time, lng, lat, speed) and duration; use `app/etl/geo.py` for distance or box checks. `rules/other_indoor.py` is a minimal example.
 3. `app/io_types/registry.py`: add it to `IO_TYPES` before any type it should win over. `OUTDOOR` matches everything and must stay last.
 4. Add a test in `tests/test_etl.py`.
 
@@ -166,7 +166,7 @@ All parameters live in `app/config/`:
   - `SPIKE_ANGLE_DEG` / `SPIKE_TIME_WINDOW_SECONDS` - GPS spike removal.
   - `STAY_DEGREE_THRESHOLD` / `SPEED_THRESHOLD_MPS` - how far and how fast a ping can be and still belong to the same stay.
   - `ROUTE_POINT_DEGREE_THRESHOLD` / `ROUTE_POINT_MAX_SECONDS` - route thinning: keep a point once the route leaves a ~300m box (0.0027 deg) of the previous kept point, or after 300s. Lower = denser map, more rows and `expo_calx` calls.
-  - `MAX_GAP_METERS` / `MAX_GAP_SECONDS` - where a route breaks (GPS dropout or jump).
+  - `MAX_GAP_DEGREES` / `MAX_GAP_SECONDS` - where a route breaks (GPS dropout or jump). The jump is `|dlat| + |dlng|` in degrees (0.0018 = ~200m north/south).
 - `io_types.py` - each io type's name, expo_calx label and thresholds (e.g. `STAY_INDOOR_MINUTES`).
 - `settings.py` - deployment values (`PRAISE_MAX_ROWS_PER_CALL`, `PRAISE_MAX_CONCURRENT_CALLS`, `MAX_INGEST_BODY_BYTES`, timeouts, DB path), overridable by env vars.
 - `constants.py` - `HK_BOUNDARY`, the Hong Kong outline used for `in_hk`.

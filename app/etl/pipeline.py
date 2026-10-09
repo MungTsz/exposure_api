@@ -5,7 +5,7 @@ defined; the ingest service and the notebook both use it.
   1. parse_pings           raw records -> time-sorted pings
   2. remove_spike_outliers drop GPS spikes
   3. group_into_stays      pings -> stays (where and how long)
-  4. label_stays           give each stay an io type (Indoor, Outdoor, ...)
+  4. label_stays           give each stay an io type (Home, Other Indoor, Outdoor, ...)
   5. simplify_routes       thin moving routes to ~one point per few hundred m
   6. split_by_hour         cut stays at HK-local clock hours
   7. mark_in_hk            flag slices outside Hong Kong (not sent to expo_calx)

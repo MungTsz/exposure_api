@@ -16,10 +16,11 @@ serves interactive docs generated from the code:
 - [Try it yourself](#try-it-yourself)
   - [1. Two pings, same spot, 10 minutes apart: one row](#1-two-pings-same-spot-10-minutes-apart-one-row)
   - [2. Two separate spots, same hour: two rows](#2-two-separate-spots-same-hour-two-rows)
-  - [3. Staying 25 minutes in one spot: Indoor](#3-staying-25-minutes-in-one-spot-indoor)
-  - [4. Outside Hong Kong: returned, but no exposure value](#4-outside-hong-kong-returned-but-no-exposure-value)
-  - [5. Crossing the border: one row in HK, one outside](#5-crossing-the-border-one-row-in-hk-one-outside)
-  - [6. Body too large: 413, nothing stored](#6-body-too-large-413-nothing-stored)
+  - [3. Staying 25 minutes in one spot: Home](#3-staying-25-minutes-in-one-spot-home)
+  - [4. Same stay at noon: Other Indoor](#4-same-stay-at-noon-other-indoor)
+  - [5. Outside Hong Kong: returned, but no exposure value](#5-outside-hong-kong-returned-but-no-exposure-value)
+  - [6. Crossing the border: one row in HK, one outside](#6-crossing-the-border-one-row-in-hk-one-outside)
+  - [7. Body too large: 413, nothing stored](#7-body-too-large-413-nothing-stored)
 - [Endpoint reference](#endpoint-reference)
   - [Upload pings](#upload-pings)
   - [Poll a batch](#poll-a-batch)
@@ -67,7 +68,7 @@ about 2 MB. Upload one day per request.
 How long a batch takes: each `expo_calx` call takes about 20-30 s no matter
 its size. A batch's calls run in parallel, up to 10 at a time, so a batch of
 up to 10 calls (400 rows) finishes in about one call's time. The densest
-sample day, 20260830, becomes 262 rows = 7 calls, all sent at once. If
+sample day, 20260830, becomes 270 rows = 7 calls, all sent at once. If
 several batches are processed at the same time, they share the same 10
 slots. The cap is per server process: running `uvicorn` with N workers
 allows up to 10 x N calls at once.
@@ -124,7 +125,7 @@ curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d
 
 Why one row: both pings are at the same coordinates, and the second one's
 `speed` (0.3 m/s) is under the 1.0 m/s threshold, so they form one stay.
-10 minutes is under the 20-minute Indoor cutoff, so it's `"Outdoor"`, and
+10 minutes is under the 20-minute indoor cutoff, so it's `"Outdoor"`, and
 both times fall in the same HK-local hour, so nothing is split. The point
 is in Clear Water Bay, Hong Kong. Batch: `"status": "done",
 "hours_processed": 1, "rows": 1`. `/exposure/hourly/demo-merge`:
@@ -154,27 +155,49 @@ starts, so the first covers 16:00-16:10 (10 min) and the second 16:10-16:15
 ]
 ```
 
-#### 3. Staying 25 minutes in one spot: Indoor
+#### 3. Staying 25 minutes in one spot: Home
 
 ```bat
 curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-indoor\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:10:00.000Z\",\"speed\":0.1},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2633,22.339965]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:25:00.000Z\",\"speed\":0.05},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26322,22.33995]}}]}"
 ```
 
-Why Indoor, and why that exact `lng`/`lat`: the 3 pings drift a few meters
+Why Home, and why that exact `lng`/`lat`: the 3 pings drift a few meters
 but stay inside the ~20m box of the first ping and are slow, so they form
-one stay from 16:00 to 16:25 - 25 minutes, past the 20-minute Indoor
-cutoff. Indoor is a `stationary` io type, so the row uses the first ping's
-exact coordinates instead of the average. `/exposure/hourly/demo-indoor`:
+one stay from 16:00 to 16:25 UTC - 25 minutes, past the 20-minute indoor
+cutoff, so it's indoor. It starts at 00:00 HK time (16:00 UTC is 00:00
+the next day in HK), inside the 00:00-06:00 Home window, so it's `"Home"`.
+Home is a `stationary` io type, so the row uses the first ping's exact
+coordinates instead of the average. `/exposure/hourly/demo-indoor`:
 
 ```json
-[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Indoor", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
+[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Home", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
 ```
 
-The request to `expo_calx` used `{"IO": "Home"}` - Indoor's `api_label`,
-since `expo_calx` doesn't accept `"Indoor"`. The translation only happens
-on the outgoing request.
+The request to `expo_calx` used `{"IO": "Home"}` - Home's `api_label`.
 
-#### 4. Outside Hong Kong: returned, but no exposure value
+#### 4. Same stay at noon: Other Indoor
+
+The same 3 pings as example 3, 12 hours later (04:00 UTC = 12:00 HK):
+
+```bat
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-other-indoor\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:10:00.000Z\",\"speed\":0.1},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2633,22.339965]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:25:00.000Z\",\"speed\":0.05},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26322,22.33995]}}]}"
+```
+
+Still one 25-minute indoor stay, but it starts at 12:00 HK, outside the
+00:00-06:00 Home window, so it's `"Other Indoor"`. Other Indoor is also
+`stationary`, so the position is the first ping again.
+`/exposure/hourly/demo-other-indoor`:
+
+```json
+[{"hour_start_hk": "20260830120000", "start_time_hk": "20260830120000", "io": "Other Indoor", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
+```
+
+The request to `expo_calx` used `{"IO": "Other Indoor"}`.
+
+Only the stay's **start** time decides Home vs Other Indoor: an indoor stay
+from 05:50 to 08:00 HK is Home as a whole, even after the hour split.
+
+#### 5. Outside Hong Kong: returned, but no exposure value
 
 ```bat
 curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-macau\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[113.5439,22.1987]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:10:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[113.5439,22.1987]}}]}"
@@ -190,7 +213,7 @@ result is fully reproducible - there is no live value. Batch: `"status":
 [{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "delta_t_hours": 0.16666666666666666, "exposure_value": null, "lng": 113.5439, "lat": 22.1987, "in_hk": false}]
 ```
 
-#### 5. Crossing the border: one row in HK, one outside
+#### 6. Crossing the border: one row in HK, one outside
 
 ```bat
 curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-border\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.128,22.501]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:10:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.117,22.545]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:20:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.117,22.545]}}]}"
@@ -210,7 +233,7 @@ back with `in_hk: false` and no value. Batch: `"status": "done",
 ]
 ```
 
-#### 6. Body too large: 413, nothing stored
+#### 7. Body too large: 413, nothing stored
 
 Making a real 25 MB body by hand is impractical, so lower the limit for
 this test. Stop the server, then restart it in `cmd.exe` with a 200-byte
@@ -320,10 +343,10 @@ More than one row can share an `hour_start_hk` + `io` (scenario 2).
 |---|---|---|
 | `hour_start_hk` | string `YYYYMMDDHH0000`, HK local | hour bucket - group by this (+ `io`) for the chart |
 | `start_time_hk` | string `YYYYMMDDHHMMSS`, HK local | this row's own start time; unique per `pid` + `io` - sort by this for the route |
-| `io` | string | io type: `"Indoor"` \| `"Outdoor"` today |
+| `io` | string | io type: `"Home"` \| `"Other Indoor"` \| `"Outdoor"` today |
 | `delta_t_hours` | number | duration of this row, in hours |
 | `exposure_value` | number or `null` | `null` if `in_hk` is `false`, or if `expo_calx` returned `-9` (failed) for this row |
-| `lng` / `lat` | number | `moving` io types (Outdoor): average of the stay's pings. `stationary` (Indoor): the stay's first ping |
+| `lng` / `lat` | number | `moving` io types (Outdoor): average of the stay's pings. `stationary` (Home, Other Indoor): the stay's first ping |
 | `in_hk` | boolean | `true` inside Hong Kong (scored); `false` outside (not scored) |
 
 The full `expo_calx` result item for each scored row is also kept in the

@@ -25,8 +25,10 @@ def to_xy_meters(lng: float, lat: float, origin_lng: float, origin_lat: float) -
     return x, y
 
 
-def meters_between(a: HasLngLat, b: HasLngLat) -> float:
-    return math.hypot(*to_xy_meters(b.lng, b.lat, a.lng, a.lat))
+def manhattan_degrees(a: HasLngLat, b: HasLngLat) -> float:
+    """|dlat| + |dlng| in degrees - a flat L1 approximation, not a haversine
+    distance (deliberately simple, no trig)."""
+    return abs(b.lat - a.lat) + abs(b.lng - a.lng)
 
 
 def angle_at_deg(a: HasLngLat, b: HasLngLat, c: HasLngLat) -> float:

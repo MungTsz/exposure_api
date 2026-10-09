@@ -5,7 +5,7 @@ results against data/samples/ in notebooks/pipeline_walkthrough.ipynb.
 Change values here, not the logic in app/etl.
 
 Thresholds that decide which io type a stay gets (e.g. how long a stay
-must last to count as Indoor) live in io_types.py instead.
+must last to count as indoor) live in io_types.py instead.
 """
 
 # --- Spike removal (app/etl/spikes.py) ---
@@ -57,13 +57,17 @@ ROUTE_POINT_MAX_SECONDS = 300.0
 # A route breaks (never simplified across) when one stay lasts longer than
 # MAX_GAP_SECONDS - a stay's end is the next ping's time, so a long stay in
 # a moving route means a GPS dropout - or when two consecutive stays'
-# points are more than MAX_GAP_METERS apart (e.g. GPS drops in a tunnel and
+# points are more than MAX_GAP_DEGREES apart (e.g. GPS drops in a tunnel and
 # resumes far away). Both endpoints of a real gap therefore survive as their
 # own points.
 #
-# 200m / 120s sit comfortably above the typical few-meters/few-seconds gap
-# between consecutive pings during normal continuous tracking in the sample
-# data (data/samples/*.geojson), while well below the multi-hundred-meter/
-# multi-minute jumps a genuine dropout produces.
-MAX_GAP_METERS = 200.0
+# The jump is measured as |dlat| + |dlng| in degrees (Manhattan distance, a
+# flat approximation like STAY_DEGREE_THRESHOLD, no trig). 0.0018 deg is
+# ~200m due north/south and ~185m due east/west at HK latitude; on a
+# diagonal L1 overestimates by up to sqrt(2), so the cutoff there is ~140m.
+# 0.0018 deg / 120s sit comfortably above the typical few-meters/few-seconds
+# gap between consecutive pings during normal continuous tracking in the
+# sample data (data/samples/*.geojson), while well below the
+# multi-hundred-meter/multi-minute jumps a genuine dropout produces.
+MAX_GAP_DEGREES = 0.0018
 MAX_GAP_SECONDS = 120.0

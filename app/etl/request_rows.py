@@ -12,7 +12,7 @@ def to_request_rows(pid: str, slices: List[HourlySlice]) -> List[list]:
     id, so results are matched back to slices by position.
 
     Row shape: [t, pid, lng, lat, {"IO": api_label}, delta_t_hours]. The io
-    name is translated to the io type's api_label (e.g. Indoor -> Home)
+    name is translated to the io type's api_label (the two can differ)
     here only; the name stays everywhere else (DB, chart).
     """
     return [
