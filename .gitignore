@@ -1,4 +1,6 @@
 .env
 __pycache__/
+.pytest_cache/
 *.db
-testing/
+# Raw sample days are large; only the ones already tracked stay in git.
+data/samples/
