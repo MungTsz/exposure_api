@@ -23,6 +23,7 @@ serves interactive docs generated from the code:
   - [7. Body too large: 413, nothing stored](#7-body-too-large-413-nothing-stored)
 - [Endpoint reference](#endpoint-reference)
   - [Upload pings](#upload-pings)
+  - [Upload a GPX file](#upload-a-gpx-file)
   - [Poll a batch](#poll-a-batch)
   - [Read hourly exposure](#read-hourly-exposure)
 - [Errors](#errors)
@@ -30,8 +31,8 @@ serves interactive docs generated from the code:
 
 ## How it works
 
-1. **Upload**: `POST /ingest` with a `pid` and the raw ping records. The
-   server checks the body size and that it contains at least one valid
+1. **Upload**: `POST /ingest` with a `pid` and the raw ping records (or
+   `POST /ingest/gpx?pid=...` with a whole GPX file). The server checks the body size and that it contains at least one valid
    ping, stores it, and answers at once with `202` and a `batch_id`.
 2. **Wait**: a background job cleans the pings, groups them into stays,
    cuts them at HK clock hours, and sends the rows **inside Hong Kong** to
@@ -298,6 +299,52 @@ and `$(...)` substitution (git-bash; `cmd.exe` has neither):
 curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\": \"local-device\", \"features\": $(jq '.features' data/samples/20260830.geojson)}"
 ```
 
+### Upload a GPX file
+
+`POST /ingest/gpx?pid=<pid>` - the same as `POST /ingest`, but the body is
+a whole GPX file (GPX 1.0 or 1.1, e.g. a RouteHistory export) instead of
+JSON. Every `<trkpt>` in every track becomes one ping; the batch is then
+processed exactly like a JSON one.
+
+Request:
+
+| part | required | notes |
+|---|---|---|
+| query `pid` | yes | person/device id; every result row is stored under it |
+| body | yes | the GPX file as-is, at most 25 MB. Send `Content-Type: application/gpx+xml` (the server does not check it) |
+
+What is read from each `<trkpt>`:
+
+| field | required | used? |
+|---|---|---|
+| `lat`, `lon` attributes | yes | yes - position. A point with a missing or out-of-range value is dropped |
+| `<time>` (ISO 8601; no zone = UTC) | yes | yes - ping time. A point without it is dropped |
+| `<speed>` (m/s, GPX 1.0 only) | no | yes, if present - stay speed check. Without it, stays are judged by distance alone, as for GeoJSON without `speed` |
+| `<ele>`, `<extensions>`, other children | no | no - accepted, ignored |
+
+Waypoints (`<wpt>`) and planned routes (`<rte>`) have no recorded time
+sequence and are ignored.
+
+Responses:
+
+| status | body | when |
+|---|---|---|
+| `202` | `{"status": "queued", "batch_id": 13}` | stored; processing has started in the background |
+| `400` | `{"detail": "invalid GPX: not a readable XML document (syntax error: line 1, column 0)"}` | body is not well-formed XML, or its root element is not `<gpx>` |
+| `400` | `{"detail": "no valid pings in request"}` | the file has no `<trkpt>` with a valid time and position |
+| `413` | `{"detail": "request body too large: limit is 26214400 bytes"}` | body over the size limit; nothing stored |
+| `422` | `{"detail": [{"type": "missing", "loc": ["query", "pid"], "msg": "Field required", ...}]}` | `pid` missing |
+
+Upload a sample file (works in `cmd.exe` and git-bash):
+
+```bash
+curl -X POST "http://localhost:8000/ingest/gpx?pid=local-device" -H "Content-Type: application/gpx+xml" --data-binary @data/samples/1009_route_history.gpx
+```
+
+Use `--data-binary`, not `-d`: `-d` strips the file's line breaks.
+`data/samples/1009_route_history.gpx` (1,314 track points, about 9 hours)
+becomes 70 rows = 2 `expo_calx` calls.
+
 ### Poll a batch
 
 `GET /ingest/{batch_id}` - the background job's progress. A batch still
@@ -359,8 +406,10 @@ Every error body is JSON with a `detail` field.
 | status | endpoint | meaning | what the app should do |
 |---|---|---|---|
 | `400` | `POST /ingest` | no valid pings in `features` | check the record format |
-| `413` | `POST /ingest` | body over 25 MB; nothing stored | split the upload (e.g. per day or half day) |
+| `400` | `POST /ingest/gpx` | not a readable GPX file, or no track point with a valid time and position | check the file |
+| `413` | `POST /ingest`, `POST /ingest/gpx` | body over 25 MB; nothing stored | split the upload (e.g. per day or half day) |
 | `422` | `POST /ingest` | `pid`/`features` missing or wrong type | fix the request body |
+| `422` | `POST /ingest/gpx` | `pid` query parameter missing | add `?pid=...` |
 | `404` | `GET /ingest/{batch_id}` | unknown `batch_id` | |
 | `status: "error"` | `GET /ingest/{batch_id}` | the background job failed; see `error_detail` | upload the batch again later |
 

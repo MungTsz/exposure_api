@@ -30,3 +30,21 @@ def feature(seconds: float, lng: float = 114.0, lat: float = 22.0, speed=None) -
     if speed is not None:
         props["speed"] = speed
     return {"type": "Feature", "properties": props, "geometry": {"type": "Point", "coordinates": [lng, lat]}}
+
+
+GPX_1_1_NS = "http://www.topografix.com/GPX/1/1"
+
+
+def gpx_document(points, namespace: str = GPX_1_1_NS) -> bytes:
+    """A GPX file with one track. `points` are (seconds, lng, lat) like
+    feature(); seconds=None writes a <trkpt> without <time>."""
+    trkpts = []
+    for seconds, lng, lat in points:
+        time = "" if seconds is None else (
+            f"<time>{(T0 + timedelta(seconds=seconds)).strftime('%Y-%m-%dT%H:%M:%SZ')}</time>"
+        )
+        trkpts.append(f'<trkpt lat="{lat}" lon="{lng}">{time}<ele>10.0</ele></trkpt>')
+    return (
+        f'<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" xmlns="{namespace}">'
+        f'<trk><trkseg>{"".join(trkpts)}</trkseg></trk></gpx>'
+    ).encode()

@@ -57,6 +57,13 @@ HK_BOUNDARY = (
     (113.835, 22.180),  # south-west of Lantau
 )
 
+# --- Input formats ---
+# `type` of a record made from one GPX <trkpt> (app/etl/parsers/gpx.py).
+# These records are what an uploaded GPX file is stored as in a batch.
+GPX_TRKPT_RECORD_TYPE = "gpx_trkpt"
+# Content-Type of a GPX upload to POST /ingest/gpx.
+GPX_MEDIA_TYPE = "application/gpx+xml"
+
 # --- expo_calx API ---
 EXPO_CALX_TODO = "expo_calx"
 # Key inside each request row's `x` dict that carries the io label.

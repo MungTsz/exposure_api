@@ -3,3 +3,4 @@ uvicorn[standard]>=0.29
 requests>=2.31
 pydantic>=2.6
 pydantic-settings>=2.2
+defusedxml>=0.7

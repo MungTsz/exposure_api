@@ -1,6 +1,7 @@
 """
 Turns raw input records into Pings. Each input format has its own module
-here. A batch may mix formats: every record is handed to the first parser
+here: geojson.py (GeoJSON Point Features) and gpx.py (GPX track points; an
+uploaded GPX file is first split into records by gpx.read_gpx). A batch may mix formats: every record is handed to the first parser
 whose can_parse() accepts it.
 
 To support a new input format (e.g. live device tracking):
@@ -14,7 +15,7 @@ import logging
 from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
 from app.etl.models import Ping
-from app.etl.parsers import geojson
+from app.etl.parsers import geojson, gpx
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class Parser(NamedTuple):
 # Tried in order for each record.
 PARSERS: List[Parser] = [
     Parser("geojson", geojson.can_parse, geojson.parse),
+    Parser("gpx", gpx.can_parse, gpx.parse),
 ]
 
 

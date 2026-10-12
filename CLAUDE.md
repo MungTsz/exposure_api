@@ -29,7 +29,7 @@ All settings come from `app/config/settings.py` (pydantic-settings): env vars fi
 
 ```
 app/main.py           create_app(); lifespan inits DB and resumes pending/processing batches in a thread
-app/api/              schemas.py + body_limit.py (413 middleware) + routes/ingest.py (POST /ingest, GET /ingest/{id}) + routes/exposure.py (GET /exposure/hourly/{pid})
+app/api/              schemas.py + body_limit.py (413 middleware) + routes/ingest.py (POST /ingest, POST /ingest/gpx, GET /ingest/{id}) + routes/exposure.py (GET /exposure/hourly/{pid})
 app/services/         ingest_service.process_batch: run_pipeline -> to_request_rows (in-HK slices only) -> praise_client -> exposure_repository (all slices)
 app/etl/              pure functions, no I/O; pipeline.run_pipeline defines the step order
 app/io_types/         registry (ordered IO_TYPES, classify, label_stays) + base.IoType + rules/<type>.py
@@ -39,7 +39,7 @@ app/db/               connection (schema, init_db with in-place column adds) + e
 
 - **`POST /ingest`** rejects bodies over `max_ingest_body_bytes` (25 MB) with 413 before reading them (`api/body_limit.py`, also counts chunked bodies), then stores the raw batch and returns `202 {"status": "queued", "batch_id"}`; processing runs as a `BackgroundTasks` job because a dense day needs several ~20-30s `expo_calx` calls. `process_batch` never raises: any failure is recorded as batch status `error` (secrets redacted).
 - **ETL steps** (`app/etl/`):
-  1. `parsers.parse_pings` - one module per input format in a `PARSERS` list; currently only `geojson.py`. Unrecognized records are skipped and logged. Live device tracking will be added later as another parser module.
+  1. `parsers.parse_pings` - one module per input format in a `PARSERS` list: `geojson.py` and `gpx.py`. `POST /ingest/gpx` turns the uploaded file into one `{"type": "gpx_trkpt", lat, lon, time, speed}` record per `<trkpt>` (`gpx.read_gpx`, defusedxml); those records are what the batch stores, so resume works unchanged. GPX has no speed (except GPX 1.0 `<speed>`), so stays are judged by distance alone; `<ele>` is ignored. Unrecognized records are skipped and logged. Live device tracking will be added later as another parser module.
   2. `spikes.remove_spike_outliers` - drops B of A,B,C when the angle at B < `SPIKE_ANGLE_DEG` within `SPIKE_TIME_WINDOW_SECONDS`; re-scans after each deletion.
   3. `stays.group_into_stays` - a stay continues while each ping is within `STAY_DEGREE_THRESHOLD` (flat lat/lng box) of the stay's first ping and its speed (if any) < `SPEED_THRESHOLD_MPS`. A stay ends when the next stay starts. Unlabelled here.
   4. `io_types.registry.label_stays` - first `IoType` in `IO_TYPES` whose `matches(stay)` is true wins; `OUTDOOR` is the always-true fallback and must be last. Done before the hour split so a stay is judged by its full duration.
@@ -55,7 +55,7 @@ app/db/               connection (schema, init_db with in-place column adds) + e
 ## Data flow
 
 ```
-RN app → POST /ingest {pid, features[]}
+RN app → POST /ingest {pid, features[]}  (or POST /ingest/gpx?pid= <GPX file> → gpx.read_gpx → records)
   → etl.parsers.parse_pings → etl.spikes.remove_spike_outliers → etl.stays.group_into_stays
   → io_types.registry.label_stays → etl.routes.simplify_routes → etl.time_split.split_by_hour
   → etl.region.mark_in_hk → etl.request_rows.to_request_rows (in-HK slices)

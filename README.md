@@ -112,7 +112,7 @@ Where a stay is placed depends on its io type's `kind`:
 
 ## Adding an input format
 
-Only GeoJSON Features are accepted today. To accept another format (e.g. live device tracking), add a module in `app/etl/parsers/` with `can_parse(record)` and `parse(record)`, and append it to `PARSERS` in `app/etl/parsers/__init__.py`. Records no parser recognizes are skipped and logged.
+GeoJSON Features (`POST /ingest`) and GPX files (`POST /ingest/gpx`, split into one record per `<trkpt>` by `app/etl/parsers/gpx.py:read_gpx`) are accepted today. To accept another format (e.g. live device tracking), add a module in `app/etl/parsers/` with `can_parse(record)` and `parse(record)`, and append it to `PARSERS` in `app/etl/parsers/__init__.py`. Records no parser recognizes are skipped and logged.
 
 ## Endpoints
 
@@ -122,6 +122,7 @@ copy-paste examples - is in **[docs/API.md](docs/API.md)**.
 | Method & path | Purpose |
 |---|---|
 | `POST /ingest` | upload a batch of raw GPS pings (max 25 MB) for background processing |
+| `POST /ingest/gpx?pid=...` | same, but the body is a whole GPX file |
 | `GET /ingest/{batch_id}` | poll a batch's processing status |
 | `GET /exposure/hourly/{pid}` | read back the hourly rows; each has `in_hk`, and rows outside Hong Kong have no `exposure_value` |
 

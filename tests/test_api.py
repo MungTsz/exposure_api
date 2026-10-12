@@ -9,7 +9,7 @@ from app.clients import praise_client
 from app.config import io_types as io_cfg
 from app.config.constants import BatchStatus
 from app.config.settings import get_settings
-from tests.conftest import feature
+from tests.conftest import feature, gpx_document
 
 INDOOR_SECONDS = io_cfg.STAY_INDOOR_MINUTES * 60
 HK = {"lng": 114.158, "lat": 22.282}        # Central, Hong Kong
@@ -132,6 +132,61 @@ def test_expo_calx_failure_marks_batch_error(client, monkeypatch):
     status = client.get(f"/ingest/{batch_id}").json()
     assert status["status"] == BatchStatus.ERROR.value
     assert status["error_detail"] == "expo_calx call timed out: read timed out apikey=REDACTED"
+
+
+def test_ingest_gpx_then_read_hourly(client, monkeypatch):
+    monkeypatch.setattr(praise_client, "calculate_exposure", _fake_exposure)
+    data = gpx_document([(0, HK["lng"], HK["lat"]), (INDOOR_SECONDS, HK["lng"], HK["lat"])])
+
+    resp = client.post("/ingest/gpx", params={"pid": "p1"}, content=data,
+                       headers={"Content-Type": "application/gpx+xml"})
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "queued"
+
+    status = client.get(f"/ingest/{resp.json()['batch_id']}").json()
+    assert (status["status"], status["rows"]) == (BatchStatus.DONE.value, 1)
+    (row,) = client.get("/exposure/hourly/p1").json()
+    assert (row["io"], row["delta_t_hours"], row["exposure_value"]) == (io_cfg.HOME_NAME, INDOOR_SECONDS / 3600, 2.5)
+
+
+def test_gpx_batch_is_stored_as_trkpt_records(client, monkeypatch, test_settings):
+    """A stored GPX batch must be re-parseable (batches are resumed on startup)."""
+    monkeypatch.setattr(praise_client, "calculate_exposure", _fake_exposure)
+    client.post("/ingest/gpx", params={"pid": "p1"}, content=gpx_document([(0, HK["lng"], HK["lat"])]))
+    with sqlite3.connect(test_settings.exposure_db_path) as conn:
+        (stored,) = conn.execute("SELECT features_json FROM ingest_batches").fetchone()
+    (record,) = json.loads(stored)
+    assert record["type"] == "gpx_trkpt"
+    assert (float(record["lon"]), float(record["lat"])) == (HK["lng"], HK["lat"])
+
+
+@pytest.mark.parametrize("data, detail", [
+    (b"<gpx><trk>", "invalid GPX"),
+    (b"<kml></kml>", "invalid GPX"),
+    (gpx_document([(None, 114.158, 22.282)]), "no valid pings in request"),
+])
+def test_bad_gpx_is_400_and_not_stored(client, data, detail):
+    resp = client.post("/ingest/gpx", params={"pid": "p1"}, content=data)
+    assert resp.status_code == 400
+    assert detail in resp.json()["detail"]
+    assert client.get("/ingest/1").status_code == 404
+
+
+def test_gpx_without_pid_is_422(client):
+    resp = client.post("/ingest/gpx", content=gpx_document([(0, HK["lng"], HK["lat"])]))
+    assert resp.status_code == 422
+
+
+def test_gpx_body_over_limit_is_413(monkeypatch):
+    from app.main import create_app
+
+    data = gpx_document([(i, HK["lng"], HK["lat"]) for i in range(10)])
+    monkeypatch.setenv("MAX_INGEST_BODY_BYTES", str(len(data) - 1))
+    get_settings.cache_clear()
+    with TestClient(create_app()) as client:
+        resp = client.post("/ingest/gpx", params={"pid": "p1"}, content=data)
+        assert resp.status_code == 413
+        assert client.get("/ingest/1").status_code == 404
 
 
 def test_unknown_batch_is_404(client):

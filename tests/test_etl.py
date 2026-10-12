@@ -10,7 +10,8 @@ from app.etl.spikes import remove_spike_outliers
 from app.etl.stays import group_into_stays
 from app.etl.time_split import split_by_hour
 from app.io_types import registry
-from tests.conftest import feature, ping
+from app.etl.parsers.gpx import GpxError, read_gpx
+from tests.conftest import feature, gpx_document, ping
 
 INDOOR_SECONDS = io_cfg.STAY_INDOOR_MINUTES * 60
 
@@ -27,6 +28,58 @@ def test_parse_geojson_sorts_and_cleans_speed():
 def test_unrecognized_records_are_skipped():
     pings = parse_pings([{"timestamp": "2026-08-29T16:00:00Z", "coords": {}}, feature(0)])
     assert len(pings) == 1
+
+
+def test_gpx_track_points_become_pings():
+    records = read_gpx(gpx_document([(0, 114.1, 22.1), (60, 114.2, 22.2)]))
+    pings = parse_pings(records)
+    assert [(p.lng, p.lat, p.speed_mps) for p in pings] == [(114.1, 22.1, None), (114.2, 22.2, None)]
+    assert (pings[1].utc - pings[0].utc).total_seconds() == 60
+    assert pings[0].utc == parse_pings([feature(0)])[0].utc
+
+
+def test_gpx_1_0_namespace_and_speed():
+    data = b"""<gpx version="1.0" xmlns="http://www.topografix.com/GPX/1/0"><trk><trkseg>
+        <trkpt lat="22.1" lon="114.1"><time>2026-08-29T16:00:00Z</time><speed>1.5</speed></trkpt>
+        <trkpt lat="22.1" lon="114.1"><time>2026-08-29T16:00:10Z</time><speed>-1</speed></trkpt>
+    </trkseg></trk></gpx>"""
+    pings = parse_pings(read_gpx(data))
+    assert [p.speed_mps for p in pings] == [1.5, None]
+
+
+def test_gpx_time_without_zone_is_utc():
+    data = b'<gpx><trk><trkseg><trkpt lat="22.1" lon="114.1"><time>2026-08-29T16:00:00</time></trkpt></trkseg></trk></gpx>'
+    (p,) = parse_pings(read_gpx(data))
+    assert p.utc == parse_pings([feature(0)])[0].utc
+
+
+def test_gpx_points_without_time_or_valid_position_are_dropped():
+    records = read_gpx(gpx_document([(0, 114.1, 22.1), (None, 114.1, 22.1), (60, 114.1, 95.0), (120, "x", 22.1)]))
+    assert len(records) == 4
+    assert len(parse_pings(records)) == 1
+
+
+def test_gpx_waypoints_and_route_points_are_ignored():
+    data = b"""<gpx><wpt lat="22.1" lon="114.1"><time>2026-08-29T16:00:00Z</time></wpt>
+        <rte><rtept lat="22.1" lon="114.1"><time>2026-08-29T16:00:00Z</time></rtept></rte></gpx>"""
+    assert read_gpx(data) == []
+
+
+def test_gpx_and_geojson_records_mix_in_time_order():
+    records = read_gpx(gpx_document([(30, 114.3, 22.3)])) + [feature(60), feature(0, lng=114.1)]
+    assert [p.lng for p in parse_pings(records)] == [114.1, 114.3, 114.0]
+
+
+@pytest.mark.parametrize("data", [b"not xml", b"<gpx><trk>", b"<kml></kml>", b""])
+def test_unreadable_gpx_raises(data):
+    with pytest.raises(GpxError):
+        read_gpx(data)
+
+
+def test_gpx_entity_expansion_is_refused():
+    data = b"""<?xml version="1.0"?><!DOCTYPE gpx [<!ENTITY a "aaaaaaaaaa">]><gpx>&a;</gpx>"""
+    with pytest.raises(GpxError):
+        read_gpx(data)
 
 
 # --- spikes ---

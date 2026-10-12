@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 
 from app.config.constants import HK_HOUR_FORMAT, HK_TIME_FORMAT
+from app.etl.parsers import parse_pings
+from app.etl.parsers.gpx import read_gpx
 from app.etl.pipeline import run_pipeline
 from app.etl.request_rows import to_request_rows
 
@@ -67,3 +69,17 @@ def test_sample_days_in_hk_flag(date, expect_in_hk):
         pytest.skip(f"{sample.name} not present in this checkout")
     features = json.loads(sample.read_text(encoding="utf-8"))["features"]
     assert {s.in_hk for s in run_pipeline(features).slices} == {expect_in_hk}
+
+
+@pytest.mark.parametrize("sample", sorted(SAMPLES_DIR.glob("*.gpx")), ids=lambda p: p.name)
+def test_gpx_sample_runs_through_pipeline(sample):
+    """GPX samples have only lat/lon/time (no speed): every track point must
+    parse and the pipeline must keep the whole first-to-last ping time."""
+    records = read_gpx(sample.read_bytes())
+    pings = parse_pings(records)
+    assert len(pings) == len(records) > 0
+
+    result = run_pipeline(records)
+    assert result.slices and all(s.in_hk for s in result.slices)
+    span_hours = (pings[-1].utc - pings[0].utc).total_seconds() / 3600
+    assert sum(s.delta_t_hours for s in result.slices) == pytest.approx(span_hours)
