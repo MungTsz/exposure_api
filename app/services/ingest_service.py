@@ -1,6 +1,6 @@
 """
-Background processing of an ingest batch: run the ETL pipeline, score the
-rows with expo_calx, store the results. Runs after POST /ingest has already
+Background processing of an ingest batch: load the place labels, run the
+ETL pipeline, score the rows with expo_calx, store the results. Runs after POST /ingest has already
 returned, because a dense day needs several ~20-30s expo_calx calls.
 
 Only slices inside Hong Kong are sent to expo_calx. Slices outside HK are
@@ -16,7 +16,7 @@ import requests
 
 from app.clients import praise_client
 from app.config.constants import HK_HOUR_FORMAT, HK_TIME_FORMAT
-from app.db import batch_repository, exposure_repository
+from app.db import batch_repository, exposure_repository, place_label_repository
 from app.etl.models import HourlySlice
 from app.etl.pipeline import run_pipeline
 from app.etl.request_rows import to_request_rows
@@ -38,6 +38,7 @@ def build_db_rows(
             "hour_start_hk": s.hour_start_hk.strftime(HK_HOUR_FORMAT),
             "start_time_hk": s.start_time_hk.strftime(HK_TIME_FORMAT),
             "io": s.io,
+            "io_source": s.io_source,
             "delta_t_hours": s.delta_t_hours,
             "exposure_value": r.value if r else None,
             "lng": s.lng,
@@ -62,11 +63,12 @@ def _process_batch(batch_id: int, pid: str, features: List[Dict[str, Any]], log_
     batch_repository.mark_processing(batch_id)
     logger.info("%s processing %d raw features", log_prefix, len(features))
 
-    result = run_pipeline(features)
+    place_labels = place_label_repository.get_all()
+    result = run_pipeline(features, place_labels)
     logger.info(
-        "%s pings=%d after_spikes=%d stays=%d after_routes=%d hourly_slices=%d",
-        log_prefix, result.pings, result.pings_after_spikes, result.stays,
-        result.stays_after_routes, len(result.slices),
+        "%s pings=%d after_spikes=%d stays=%d from_labels=%d (of %d labels) after_routes=%d hourly_slices=%d",
+        log_prefix, result.pings, result.pings_after_spikes, result.stays, result.stays_from_labels,
+        len(place_labels), result.stays_after_routes, len(result.slices),
     )
 
     hk_slices = result.hk_slices

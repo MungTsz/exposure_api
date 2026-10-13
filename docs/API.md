@@ -1,7 +1,9 @@
 # Exposure API
 
 HTTP API for the RN app: upload raw GPS pings, wait for the background job,
-then read per-hour exposure rows for the chart and the map.
+then read per-hour exposure rows for the chart and the map. Users can also
+label places (Home, Office, School, Other Indoor); those labels decide the
+io type of stays at that place, for every user.
 
 Base URL when running locally: `http://localhost:8000`. The server also
 serves interactive docs generated from the code:
@@ -21,11 +23,15 @@ serves interactive docs generated from the code:
   - [5. Outside Hong Kong: returned, but no exposure value](#5-outside-hong-kong-returned-but-no-exposure-value)
   - [6. Crossing the border: one row in HK, one outside](#6-crossing-the-border-one-row-in-hk-one-outside)
   - [7. Body too large: 413, nothing stored](#7-body-too-large-413-nothing-stored)
+  - [8. A place label: the noon stay becomes Office](#8-a-place-label-the-noon-stay-becomes-office)
+- [Place labels](#place-labels)
 - [Endpoint reference](#endpoint-reference)
   - [Upload pings](#upload-pings)
   - [Upload a GPX file](#upload-a-gpx-file)
   - [Poll a batch](#poll-a-batch)
   - [Read hourly exposure](#read-hourly-exposure)
+  - [Create or update a place label](#create-or-update-a-place-label)
+  - [Delete a place label](#delete-a-place-label)
 - [Errors](#errors)
 - [Configuration](#configuration)
 
@@ -132,7 +138,7 @@ is in Clear Water Bay, Hong Kong. Batch: `"status": "done",
 "hours_processed": 1, "rows": 1`. `/exposure/hourly/demo-merge`:
 
 ```json
-[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
+[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "io_source": "inferred", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
 ```
 
 #### 2. Two separate spots, same hour: two rows
@@ -151,8 +157,8 @@ starts, so the first covers 16:00-16:10 (10 min) and the second 16:10-16:15
 
 ```json
 [
-  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true},
-  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830001000", "io": "Outdoor", "delta_t_hours": 0.08333333333333333, "exposure_value": <live value>, "lng": 114.265, "lat": 22.3399579, "in_hk": true}
+  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "io_source": "inferred", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true},
+  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830001000", "io": "Outdoor", "io_source": "inferred", "delta_t_hours": 0.08333333333333333, "exposure_value": <live value>, "lng": 114.265, "lat": 22.3399579, "in_hk": true}
 ]
 ```
 
@@ -171,7 +177,7 @@ Home is a `stationary` io type, so the row uses the first ping's exact
 coordinates instead of the average. `/exposure/hourly/demo-indoor`:
 
 ```json
-[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Home", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
+[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Home", "io_source": "inferred", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
 ```
 
 The request to `expo_calx` used `{"IO": "Home"}` - Home's `api_label`.
@@ -190,7 +196,7 @@ Still one 25-minute indoor stay, but it starts at 12:00 HK, outside the
 `/exposure/hourly/demo-other-indoor`:
 
 ```json
-[{"hour_start_hk": "20260830120000", "start_time_hk": "20260830120000", "io": "Other Indoor", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
+[{"hour_start_hk": "20260830120000", "start_time_hk": "20260830120000", "io": "Other Indoor", "io_source": "inferred", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
 ```
 
 The request to `expo_calx` used `{"IO": "Other Indoor"}`.
@@ -211,7 +217,7 @@ result is fully reproducible - there is no live value. Batch: `"status":
 "done", "hours_processed": 1, "rows": 1`. `/exposure/hourly/demo-macau`:
 
 ```json
-[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "delta_t_hours": 0.16666666666666666, "exposure_value": null, "lng": 113.5439, "lat": 22.1987, "in_hk": false}]
+[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "io_source": "inferred", "delta_t_hours": 0.16666666666666666, "exposure_value": null, "lng": 113.5439, "lat": 22.1987, "in_hk": false}]
 ```
 
 #### 6. Crossing the border: one row in HK, one outside
@@ -229,8 +235,8 @@ back with `in_hk: false` and no value. Batch: `"status": "done",
 
 ```json
 [
-  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.128, "lat": 22.501, "in_hk": true},
-  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830001000", "io": "Outdoor", "delta_t_hours": 0.16666666666666666, "exposure_value": null, "lng": 114.117, "lat": 22.545, "in_hk": false}
+  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "io_source": "inferred", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.128, "lat": 22.501, "in_hk": true},
+  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830001000", "io": "Outdoor", "io_source": "inferred", "delta_t_hours": 0.16666666666666666, "exposure_value": null, "lng": 114.117, "lat": 22.545, "in_hk": false}
 ]
 ```
 
@@ -256,6 +262,96 @@ HTTP 413
 No batch is created. Afterwards, close that window or run
 `set MAX_INGEST_BODY_BYTES=` before restarting, to go back to the 25 MB
 default.
+
+#### 8. A place label: the noon stay becomes Office
+
+First label the spot from examples 3 and 4 as an Office, a 25 m circle
+around the first ping:
+
+```bat
+curl -X PUT http://localhost:8000/place-labels/demo-office -H "Content-Type: application/json" -d "{\"contributor_id\":\"c-demo\",\"category\":\"Office\",\"lat\":22.3399579,\"lng\":114.2632457,\"radius_m\":25,\"updated_at\":\"2026-10-13T09:15:00+08:00\"}"
+```
+
+The response is `201` (created) with the stored label; `updated_at` comes
+back in UTC:
+
+```json
+{"label_id": "demo-office", "contributor_id": "c-demo", "category": "Office", "lat": 22.3399579, "lng": 114.2632457, "radius_m": 25.0, "updated_at": "2026-10-13T01:15:00Z"}
+```
+
+Sending the same command again returns `200` with the same body and
+changes nothing. Now upload the pings from example 4 again, under a new
+`pid`:
+
+```bat
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-label\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:10:00.000Z\",\"speed\":0.1},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2633,22.339965]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:25:00.000Z\",\"speed\":0.05},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26322,22.33995]}}]}"
+```
+
+Why Office: it is still one 25-minute indoor stay at 12:00 HK, which the
+rules would call `"Other Indoor"`. But all 3 pings are within 25 m of the
+label's centre (about 0, 6 and 3 m away), so the label matches and its
+category wins. `io_source` says the label decided it.
+`/exposure/hourly/demo-label`:
+
+```json
+[{"hour_start_hk": "20260830120000", "start_time_hk": "20260830120000", "io": "Office", "io_source": "label", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
+```
+
+The request to `expo_calx` used `{"IO": "Office"}`.
+
+Labels are shared, so while this one exists, examples 3 and 4 at the same
+spot also come out as `"Office"` (a label overrides the 00:00-06:00 Home
+window too). Delete it to get the results above back:
+
+```bat
+curl -X DELETE "http://localhost:8000/place-labels/demo-office?contributor_id=c-demo"
+```
+
+`204`, no body. Running it again gives `404`, which the app can treat as
+already deleted.
+
+## Place labels
+
+A place label is a circle - a centre and a radius of 10-200 m - that a user
+puts on a place to say what it is: `Home`, `Office`, `School` or
+`Other Indoor`. Labels are shared, crowd-sourced data: a label describes
+the place ("this building is an office"), not the person who added it, so
+**every** `pid`'s stays are checked against **every** contributor's labels.
+The radius tells the server how big the place is, and lets users shrink
+two nearby circles (e.g. a Home and an Office 40 m apart, 15 m each) so
+they no longer overlap.
+
+How a stay's io type is chosen:
+
+1. The rules run first, as in examples 1-4. Only a stay the rules call
+   indoor (20+ minutes in one spot: Home or Other Indoor) can take a
+   label's category. A short stay that passes through a circle - walking
+   past an office door - stays `"Outdoor"`.
+2. A label matches the stay when its circle holds **at least half of the
+   stay's pings**. All pings are counted, not just the first, because
+   indoor GPS often drifts 20-50 m.
+3. If several labels match, the one holding the most of the stay's pings
+   wins; on a tie, the smaller radius wins (it is the more specific place).
+4. Labels for the same spot (circles overlapping by at least half of their
+   combined area) are a vote: the category with the most distinct
+   contributors wins. A small circle inside a much bigger one is not the
+   same spot, so it is not outvoted by it. The result never depends on the
+   order labels were added.
+5. No match: the rules' result stands (00:00-06:00 HK start = Home, else
+   Other Indoor). A match overrides it: a stay starting at 14:00 inside a
+   Home circle is Home.
+
+Each row in `GET /exposure/hourly/{pid}` says which way it went in
+`io_source`: `"label"` or `"inferred"`.
+
+Labels only affect batches processed **after** the label is stored. Rows
+already stored are not changed.
+
+Labels outside Hong Kong may be stored. They still set the `io` of rows
+there, but those rows are never sent to `expo_calx`.
+
+No endpoint lists labels: one user's labels (especially Home circles) are
+never returned to anyone else.
 
 ## Endpoint reference
 
@@ -390,14 +486,54 @@ More than one row can share an `hour_start_hk` + `io` (scenario 2).
 |---|---|---|
 | `hour_start_hk` | string `YYYYMMDDHH0000`, HK local | hour bucket - group by this (+ `io`) for the chart |
 | `start_time_hk` | string `YYYYMMDDHHMMSS`, HK local | this row's own start time; unique per `pid` + `io` - sort by this for the route |
-| `io` | string | io type: `"Home"` \| `"Other Indoor"` \| `"Outdoor"` today |
+| `io` | string | io type: `"Home"` \| `"Office"` \| `"School"` \| `"Other Indoor"` \| `"Outdoor"` |
+| `io_source` | string | `"label"` if a [place label](#place-labels) decided `io`, `"inferred"` if the rules did |
 | `delta_t_hours` | number | duration of this row, in hours |
 | `exposure_value` | number or `null` | `null` if `in_hk` is `false`, or if `expo_calx` returned `-9` (failed) for this row |
-| `lng` / `lat` | number | `moving` io types (Outdoor): average of the stay's pings. `stationary` (Home, Other Indoor): the stay's first ping |
+| `lng` / `lat` | number | `moving` io types (Outdoor): average of the stay's pings. `stationary` (Home, Office, School, Other Indoor): the stay's first ping |
 | `in_hk` | boolean | `true` inside Hong Kong (scored); `false` outside (not scored) |
 
 The full `expo_calx` result item for each scored row is also kept in the
 DB column `api_result_json`, so new fields the API adds aren't lost.
+
+### Create or update a place label
+
+`PUT /place-labels/{label_id}` - store a label, or update it if
+`label_id` already exists. Safe to retry with the same body. See
+[Place labels](#place-labels) for how labels are used, and example 8.
+
+Path: `label_id` - string, 1-64 characters, generated by the app, unique
+per label. The same id means the same label.
+
+Request body (`Content-Type: application/json`):
+
+| field | type | required | notes |
+|---|---|---|---|
+| `contributor_id` | string, 1-64 chars | yes | random per-install id; not linked to a `pid` or a person. Only this contributor can later change or delete the label |
+| `category` | string | yes | exactly `"Home"`, `"Office"`, `"School"` or `"Other Indoor"` |
+| `lat` / `lng` | number | yes | WGS84 centre of the circle; `lat` -90..90, `lng` -180..180 |
+| `radius_m` | number | yes | 10-200 (the app's default is 25) |
+| `updated_at` | string, ISO 8601 **with** a time zone | yes | when the user last edited the label. If the server already has this label with the same or a newer `updated_at`, nothing changes |
+
+Responses (body = the label as stored, `updated_at` in UTC):
+
+| status | when |
+|---|---|
+| `201` | created |
+| `200` | updated, or not changed because the stored `updated_at` is the same or newer |
+| `403` `{"detail": "label_id belongs to another contributor_id"}` | the label exists under a different `contributor_id`; nothing changes |
+| `422` `{"detail": [{"msg": ...}, ...]}` | unknown `category`, `lat`/`lng`/`radius_m` out of range, `updated_at` without a time zone, a field missing, or an id longer than 64 |
+
+### Delete a place label
+
+`DELETE /place-labels/{label_id}?contributor_id=<contributor_id>`
+
+| status | when |
+|---|---|
+| `204` (no body) | deleted |
+| `404` `{"detail": "unknown label_id"}` | no such label - treat as already deleted |
+| `403` `{"detail": "label_id belongs to another contributor_id"}` | the label belongs to someone else; nothing changes |
+| `422` | `contributor_id` missing |
 
 ## Errors
 
@@ -411,6 +547,9 @@ Every error body is JSON with a `detail` field.
 | `422` | `POST /ingest` | `pid`/`features` missing or wrong type | fix the request body |
 | `422` | `POST /ingest/gpx` | `pid` query parameter missing | add `?pid=...` |
 | `404` | `GET /ingest/{batch_id}` | unknown `batch_id` | |
+| `403` | `PUT`, `DELETE /place-labels/{label_id}` | the label belongs to another `contributor_id` | don't retry; use a new `label_id` for a new label |
+| `404` | `DELETE /place-labels/{label_id}` | no such label | treat as already deleted |
+| `422` | `PUT /place-labels/{label_id}` | invalid field (see the endpoint) | fix the request body |
 | `status: "error"` | `GET /ingest/{batch_id}` | the background job failed; see `error_detail` | upload the batch again later |
 
 ## Configuration

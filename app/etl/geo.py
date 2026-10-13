@@ -46,3 +46,33 @@ def within_degree_box(ref: HasLngLat, p: HasLngLat, threshold_deg: float) -> boo
     """True if p is within threshold_deg of ref on both lat and lng - a flat
     lat/lng box, not a haversine distance (deliberately simple)."""
     return abs(p.lat - ref.lat) <= threshold_deg and abs(p.lng - ref.lng) <= threshold_deg
+
+
+class HasCircle(HasLngLat, Protocol):
+    radius_m: float
+
+
+def distance_m(a: HasLngLat, b: HasLngLat) -> float:
+    return math.hypot(*to_xy_meters(b.lng, b.lat, a.lng, a.lat))
+
+
+def within_circle(circle: HasCircle, p: HasLngLat) -> bool:
+    return distance_m(circle, p) <= circle.radius_m
+
+
+def circle_overlap_ratio(a: HasCircle, b: HasCircle) -> float:
+    """Intersection area / union area of two circles: 1 = the same circle,
+    0 = no overlap. A small circle inside a big one scores low."""
+    d, r1, r2 = distance_m(a, b), a.radius_m, b.radius_m
+    if d >= r1 + r2:
+        return 0.0
+    if d <= abs(r1 - r2):
+        intersection = math.pi * min(r1, r2) ** 2
+    else:
+        intersection = (
+            r1 ** 2 * math.acos((d ** 2 + r1 ** 2 - r2 ** 2) / (2 * d * r1))
+            + r2 ** 2 * math.acos((d ** 2 + r2 ** 2 - r1 ** 2) / (2 * d * r2))
+            - 0.5 * math.sqrt((-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2))
+        )
+    union = math.pi * r1 ** 2 + math.pi * r2 ** 2 - intersection
+    return intersection / union

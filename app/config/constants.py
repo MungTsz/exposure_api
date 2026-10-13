@@ -76,6 +76,20 @@ FAILED_ROW_SENTINEL = -9
 SECRET_QUERY_PARAMS = ("apikey", "myid")
 
 
+# --- Place labels ---
+# Limits on PUT /place-labels/{label_id}, agreed with the app.
+PLACE_LABEL_ID_MAX_LENGTH = 64           # label_id and contributor_id
+PLACE_LABEL_MIN_RADIUS_M = 10
+PLACE_LABEL_MAX_RADIUS_M = 200
+
+
+class IoSource(str, Enum):
+    """Where a stay's io type came from."""
+
+    LABEL = "label"        # a place label matched the stay
+    INFERRED = "inferred"  # the io type rules in app/io_types/rules
+
+
 # --- Ingest batches ---
 class BatchStatus(str, Enum):
     PENDING = "pending"

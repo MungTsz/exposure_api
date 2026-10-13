@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.body_limit import MaxBodySizeMiddleware
-from app.api.routes import exposure, ingest
+from app.api.routes import exposure, ingest, place_labels
 from app.config.constants import APP_TITLE, LOG_FORMAT
 from app.config.settings import get_settings
 from app.db import batch_repository
@@ -41,6 +41,7 @@ def create_app() -> FastAPI:
     app.add_middleware(MaxBodySizeMiddleware, max_bytes=settings.max_ingest_body_bytes)
     app.include_router(ingest.router)
     app.include_router(exposure.router)
+    app.include_router(place_labels.router)
     return app
 
 

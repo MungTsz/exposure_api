@@ -40,6 +40,7 @@ def split_by_hour(stays: List[Stay]) -> List[HourlySlice]:
                         lng=stay.lng,
                         lat=stay.lat,
                         delta_t_hours=duration_hours,
+                        io_source=stay.io_source,
                     )
                 )
             hour_cursor = next_hour

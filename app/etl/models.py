@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
 
+from app.config.constants import IoSource
+
 
 @dataclass
 class Ping:
@@ -21,14 +23,15 @@ class Stay:
     slowly - i.e. how long the person stayed at one place. While moving,
     each ping usually becomes its own very short stay.
 
-    `io`, `lng` and `lat` are empty until app.io_types.registry.label_stays
-    fills them in.
+    `io`, `io_source`, `lng` and `lat` are empty until
+    app.io_types.registry.label_stays fills them in.
     """
 
     start_utc: datetime
     end_utc: datetime
     pings: List[Ping] = field(default_factory=list)
     io: Optional[str] = None
+    io_source: Optional[str] = None  # constants.IoSource value
     lng: Optional[float] = None
     lat: Optional[float] = None
 
@@ -51,6 +54,8 @@ class HourlySlice:
     lng: float
     lat: float
     delta_t_hours: float
+    # constants.IoSource value: "label" if a place label set `io`.
+    io_source: str = IoSource.INFERRED.value
     # Inside Hong Kong? Only HK slices are sent to expo_calx. Set by
     # app.etl.region.mark_in_hk.
     in_hk: bool = True

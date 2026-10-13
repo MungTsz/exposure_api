@@ -21,11 +21,14 @@ def upsert_hourly(rows: List[Dict[str, Any]]) -> None:
         conn.executemany(
             """
             INSERT INTO hourly_exposure
-                (pid, hour_start_hk, start_time_hk, io, delta_t_hours, exposure_value, lng, lat, in_hk, api_result_json)
+                (pid, hour_start_hk, start_time_hk, io, io_source, delta_t_hours, exposure_value, lng, lat, in_hk,
+                 api_result_json)
             VALUES
-                (:pid, :hour_start_hk, :start_time_hk, :io, :delta_t_hours, :exposure_value, :lng, :lat, :in_hk, :api_result_json)
+                (:pid, :hour_start_hk, :start_time_hk, :io, :io_source, :delta_t_hours, :exposure_value, :lng, :lat,
+                 :in_hk, :api_result_json)
             ON CONFLICT(pid, io, start_time_hk) DO UPDATE SET
                 hour_start_hk = excluded.hour_start_hk,
+                io_source = excluded.io_source,
                 delta_t_hours = excluded.delta_t_hours,
                 exposure_value = excluded.exposure_value,
                 lng = excluded.lng,
@@ -41,7 +44,7 @@ def get_hourly(pid: str) -> List[Dict[str, Any]]:
     with get_conn() as conn:
         cur = conn.execute(
             """
-            SELECT hour_start_hk, start_time_hk, io, delta_t_hours, exposure_value, lng, lat, in_hk
+            SELECT hour_start_hk, start_time_hk, io, io_source, delta_t_hours, exposure_value, lng, lat, in_hk
             FROM hourly_exposure
             WHERE pid = ?
             ORDER BY start_time_hk

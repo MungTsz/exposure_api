@@ -44,7 +44,7 @@ def test_ingest_then_read_hourly(client, monkeypatch):
     rows = client.get("/exposure/hourly/p1").json()
     assert rows == [{
         "hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": io_cfg.HOME_NAME,
-        "delta_t_hours": INDOOR_SECONDS / 3600, "exposure_value": 2.5, "lng": 114.158, "lat": 22.282,
+        "io_source": "inferred", "delta_t_hours": INDOOR_SECONDS / 3600, "exposure_value": 2.5, "lng": 114.158, "lat": 22.282,
         "in_hk": True,
     }]
 
@@ -191,3 +191,75 @@ def test_gpx_body_over_limit_is_413(monkeypatch):
 
 def test_unknown_batch_is_404(client):
     assert client.get("/ingest/999").status_code == 404
+
+
+# --- place labels ---
+
+LABEL = {
+    "contributor_id": "c-8f3a1b2c9d", "category": io_cfg.OFFICE_NAME, **HK,
+    "radius_m": 25, "updated_at": "2026-10-13T09:15:00+08:00",
+}
+
+
+def test_put_label_creates_then_updates(client):
+    resp = client.put("/place-labels/l1", json=LABEL)
+    assert resp.status_code == 201
+    assert resp.json() == {
+        "label_id": "l1", "contributor_id": "c-8f3a1b2c9d", "category": io_cfg.OFFICE_NAME, **HK,
+        "radius_m": 25.0, "updated_at": "2026-10-13T01:15:00Z",
+    }
+
+    assert client.put("/place-labels/l1", json=LABEL).status_code == 200  # retry: no change
+
+    newer = {**LABEL, "radius_m": 40, "updated_at": "2026-10-13T10:00:00+08:00"}
+    resp = client.put("/place-labels/l1", json=newer)
+    assert (resp.status_code, resp.json()["radius_m"]) == (200, 40.0)
+
+    resp = client.put("/place-labels/l1", json={**LABEL, "radius_m": 10})  # older than stored
+    assert (resp.status_code, resp.json()["radius_m"]) == (200, 40.0)
+
+
+def test_label_of_another_contributor_is_403(client):
+    client.put("/place-labels/l1", json=LABEL)
+    other = {**LABEL, "contributor_id": "c-other", "updated_at": "2026-10-14T00:00:00+08:00"}
+    assert client.put("/place-labels/l1", json=other).status_code == 403
+    assert client.delete("/place-labels/l1", params={"contributor_id": "c-other"}).status_code == 403
+
+
+@pytest.mark.parametrize("change", [
+    {"radius_m": 9}, {"radius_m": 201}, {"category": "Shop"}, {"lat": 91}, {"lng": -181},
+    {"updated_at": "2026-10-13T09:15:00"}, {"contributor_id": "c" * 65},
+])
+def test_invalid_label_is_422(client, change):
+    resp = client.put("/place-labels/l1", json={**LABEL, **change})
+    assert resp.status_code == 422
+    assert isinstance(resp.json()["detail"], list)
+
+
+def test_label_id_too_long_is_422(client):
+    assert client.put(f"/place-labels/{'x' * 65}", json=LABEL).status_code == 422
+
+
+def test_delete_label(client):
+    client.put("/place-labels/l1", json=LABEL)
+    params = {"contributor_id": LABEL["contributor_id"]}
+    assert client.delete("/place-labels/l1", params=params).status_code == 204
+    assert client.delete("/place-labels/l1", params=params).status_code == 404
+    assert client.delete("/place-labels/l1").status_code == 422  # contributor_id missing
+
+
+def test_ingest_uses_place_labels(client, monkeypatch):
+    sent = []
+
+    def fake(rows):
+        sent.extend(rows)
+        return _fake_exposure(rows)
+
+    monkeypatch.setattr(praise_client, "calculate_exposure", fake)
+    client.put("/place-labels/l1", json=LABEL)  # posted by another user; labels are shared
+    start = 14 * 3600  # 14:00 HK: without the label this would be Other Indoor
+    client.post("/ingest", json={"pid": "p1", "features": [feature(start, **HK), feature(start + INDOOR_SECONDS, **HK)]})
+
+    (row,) = client.get("/exposure/hourly/p1").json()
+    assert (row["io"], row["io_source"]) == (io_cfg.OFFICE_NAME, "label")
+    assert sent[0][4] == {"IO": io_cfg.OFFICE_API_LABEL}
