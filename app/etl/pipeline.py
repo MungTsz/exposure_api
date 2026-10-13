@@ -17,7 +17,8 @@ whichever partial slice lands in one hour.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Sequence
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Sequence
 
 from app.config.constants import IoSource
 from app.etl.models import HourlySlice
@@ -40,6 +41,10 @@ class PipelineResult:
     stays: int
     stays_from_labels: int
     stays_after_routes: int
+    # Time of the first and last parsed ping (None if there were none): the
+    # span this batch covers, so its rows can replace older rows there.
+    first_ping_utc: Optional[datetime] = None
+    last_ping_utc: Optional[datetime] = None
 
     @property
     def hk_slices(self) -> List[HourlySlice]:
@@ -61,4 +66,6 @@ def run_pipeline(records: List[Dict[str, Any]], place_labels: Sequence[PlaceLabe
         stays=len(stays),
         stays_from_labels=sum(1 for s in stays if s.io_source == IoSource.LABEL.value),
         stays_after_routes=len(simplified),
+        first_ping_utc=pings[0].utc if pings else None,
+        last_ping_utc=pings[-1].utc if pings else None,
     )

@@ -263,3 +263,18 @@ def test_ingest_uses_place_labels(client, monkeypatch):
     (row,) = client.get("/exposure/hourly/p1").json()
     assert (row["io"], row["io_source"]) == (io_cfg.OFFICE_NAME, "label")
     assert sent[0][4] == {"IO": io_cfg.OFFICE_API_LABEL}
+
+
+def test_ingest_again_replaces_the_old_rows(client, monkeypatch):
+    # 00:00 HK: Home by the rules. After an Office label, the same upload
+    # must replace the Home row, not sit next to it.
+    monkeypatch.setattr(praise_client, "calculate_exposure", _fake_exposure)
+    body = {"pid": "p1", "features": [feature(0, **HK), feature(INDOOR_SECONDS, **HK)]}
+    client.post("/ingest", json={**body, "pid": "p2"})
+    client.post("/ingest", json=body)
+    assert [r["io"] for r in client.get("/exposure/hourly/p1").json()] == [io_cfg.HOME_NAME]
+
+    client.put("/place-labels/l1", json=LABEL)
+    client.post("/ingest", json=body)
+    assert [(r["io"], r["io_source"]) for r in client.get("/exposure/hourly/p1").json()] == [(io_cfg.OFFICE_NAME, "label")]
+    assert [r["io"] for r in client.get("/exposure/hourly/p2").json()] == [io_cfg.HOME_NAME]  # other pid untouched

@@ -1,10 +1,19 @@
 """
 The list of io types and how a stay is assigned one.
 
-A stay first gets the first io type in IO_TYPES whose rule matches it. If
-that io type is stationary and a place label matches the stay (see
-place_labels.py), the label's category replaces it: a label the user put
-on the map is more reliable than the rules. Moving stays never use labels.
+A stay gets the first io type in IO_TYPES whose rule matches it, unless it
+is part of a visit to a labelled place (see place_labels.py): then the
+label's category wins, whatever the rules say - a label the user put on the
+map is more reliable than the rules, so an Office circle at 02:00 is
+Office, not Home.
+
+A visit starts at a stay a label matches and takes in the consecutive stays
+around it that match the same category, or would with the circles grown by
+PLACE_LABEL_DRIFT_MARGIN_M. Indoor GPS drift splits a night at one place
+into many short stays, each of which the rules alone would call Outdoor (or
+Home, if it drifted out of the circle). A visit counts once it lasts
+STAY_INDOOR_MINUTES or holds a stationary stay, so walking past an office
+stays Outdoor; its stays become one stay with the label's category.
 
 To add an io type (e.g. Bus):
   1. Add its NAME, API_LABEL and rule thresholds to app/config/io_types.py.
@@ -15,8 +24,9 @@ To add an io type (e.g. Bus):
 """
 
 from dataclasses import replace
-from typing import Dict, List, Sequence
+from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 
+from app.config import io_types as cfg
 from app.config.constants import IoSource
 from app.etl.models import Stay
 from app.io_types.base import IoKind, IoType
@@ -58,14 +68,69 @@ def classify(stay: Stay) -> IoType:
 
 def label_stays(stays: List[Stay], place_labels: Sequence[PlaceLabel] = ()) -> List[Stay]:
     """Give each stay its io type name, where it came from (io_source) and
-    the position that type reports."""
+    the position that type reports. Each visit to a labelled place comes
+    back as one stay."""
     labelled = []
-    for stay in stays:
-        io_type, source = classify(stay), IoSource.INFERRED
-        if io_type.kind == IoKind.STATIONARY:
-            category = match_place_label(stay.pings, place_labels)
-            if category is not None:
-                io_type, source = get(category), IoSource.LABEL
+    for group, category in _visits(stays, place_labels):
+        if category is None:
+            (stay,) = group
+            io_type, source = classify(stay), IoSource.INFERRED
+        else:
+            stay = Stay(start_utc=group[0].start_utc, end_utc=group[-1].end_utc,
+                        pings=[p for s in group for p in s.pings])
+            io_type, source = get(category), IoSource.LABEL
         lng, lat = io_type.position(stay)
         labelled.append(replace(stay, io=io_type.name, io_source=source.value, lng=lng, lat=lat))
     return labelled
+
+
+def _visits(stays: List[Stay], labels: Sequence[PlaceLabel]) -> Iterator[Tuple[List[Stay], Optional[str]]]:
+    """The stays in order, as (visit, category) for each visit to a labelled
+    place and ([stay], None) for every other stay."""
+    if not labels:
+        for stay in stays:
+            yield [stay], None
+        return
+
+    grown = [replace(label, radius_m=label.radius_m + cfg.PLACE_LABEL_DRIFT_MARGIN_M) for label in labels]
+    strict = [match_place_label(s.pings, labels) for s in stays]
+    near_cache: Dict[int, Optional[str]] = {}
+
+    def near(k: int) -> Optional[str]:
+        if k not in near_cache:
+            near_cache[k] = match_place_label(stays[k].pings, grown)
+        return near_cache[k]
+
+    done = 0  # stays[:done] are yielded
+    i = 0
+    while i < len(stays):
+        category = strict[i]
+        if category is None:
+            i += 1
+            continue
+        # stays[done:i] match no label, so any of them may join backwards.
+        start = i
+        while start > done and near(start - 1) == category:
+            start -= 1
+        end = i + 1
+        while end < len(stays) and strict[end] in (None, category) and (
+            strict[end] == category or near(end) == category
+        ):
+            end += 1
+
+        for stay in stays[done:start]:
+            yield [stay], None
+        group = stays[start:end]
+        if _is_visit(group):
+            yield group, category
+        else:
+            for stay in group:
+                yield [stay], None
+        done = i = end
+    for stay in stays[done:]:
+        yield [stay], None
+
+
+def _is_visit(group: List[Stay]) -> bool:
+    duration = (group[-1].end_utc - group[0].start_utc).total_seconds()
+    return duration >= cfg.STAY_INDOOR_MINUTES * 60 or any(classify(s).kind == IoKind.STATIONARY for s in group)

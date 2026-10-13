@@ -20,6 +20,7 @@ from app.db import batch_repository, exposure_repository, place_label_repository
 from app.etl.models import HourlySlice
 from app.etl.pipeline import run_pipeline
 from app.etl.request_rows import to_request_rows
+from app.etl.time_split import to_hk
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,16 @@ def _process_batch(batch_id: int, pid: str, features: List[Dict[str, Any]], log_
             return
 
     db_rows = build_db_rows(pid, result.slices, results)
-    exposure_repository.upsert_hourly(db_rows)
+    if result.first_ping_utc is None:
+        exposure_repository.upsert_hourly(db_rows)
+    else:
+        # Replace whatever an earlier upload stored for the same time span.
+        exposure_repository.replace_hourly(
+            pid,
+            to_hk(result.first_ping_utc).strftime(HK_TIME_FORMAT),
+            to_hk(result.last_ping_utc).strftime(HK_TIME_FORMAT),
+            db_rows,
+        )
 
     hours_processed = len({s.hour_start_hk for s in result.slices})
     logger.info("%s ingest complete: hours_processed=%d rows=%d", log_prefix, hours_processed, len(db_rows))

@@ -323,10 +323,13 @@ they no longer overlap.
 
 How a stay's io type is chosen:
 
-1. The rules run first, as in examples 1-4. Only a stay the rules call
-   indoor (20+ minutes in one spot: Home or Other Indoor) can take a
-   label's category. A short stay that passes through a circle - walking
-   past an office door - stays `"Outdoor"`.
+1. Labels work on **visits**: the consecutive stays a label matches, plus
+   neighbouring stays drifted up to 30 m past the circle's edge (indoor GPS
+   drift can split a night at one place into many short stays). A visit
+   counts as one stay with the label's category, whatever the rules say:
+   an Office circle at 02:00 is `"Office"`, never `"Home"`. A visit needs
+   at least 20 minutes in total, so walking past an office door stays
+   `"Outdoor"`.
 2. A label matches the stay when its circle holds **at least half of the
    stay's pings**. All pings are counted, not just the first, because
    indoor GPS often drifts 20-50 m.
@@ -337,15 +340,18 @@ How a stay's io type is chosen:
    contributors wins. A small circle inside a much bigger one is not the
    same spot, so it is not outvoted by it. The result never depends on the
    order labels were added.
-5. No match: the rules' result stands (00:00-06:00 HK start = Home, else
-   Other Indoor). A match overrides it: a stay starting at 14:00 inside a
-   Home circle is Home.
+5. No match: the rules' result stands (as in examples 1-4: 20+ minutes in
+   one spot starting 00:00-06:00 HK = Home, else Other Indoor; shorter =
+   Outdoor). A match overrides it: a stay starting at 14:00 inside a Home
+   circle is Home.
 
 Each row in `GET /exposure/hourly/{pid}` says which way it went in
 `io_source`: `"label"` or `"inferred"`.
 
 Labels only affect batches processed **after** the label is stored. Rows
-already stored are not changed.
+already stored are not changed until the same pings are uploaded again: a
+batch replaces every stored row of that `pid` whose `start_time_hk` lies
+between its first and last ping.
 
 Labels outside Hong Kong may be stored. They still set the `io` of rows
 there, but those rows are never sent to `expo_calx`.

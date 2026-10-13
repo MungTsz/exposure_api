@@ -50,9 +50,13 @@ OUTDOOR_NAME = "Outdoor"
 OUTDOOR_API_LABEL = "Outdoor"
 
 # --- Place labels (app/io_types/place_labels.py) ---
-# Circles users put on a map (PUT /place-labels/{label_id}). A stationary
-# stay that a label matches gets the label's category as its io type,
-# instead of the time-window rule above. Moving stays never use labels.
+# Circles users put on a map (PUT /place-labels/{label_id}). A visit to a
+# labelled place gets the label's category as its io type, instead of the
+# rules above (so an Office circle at 02:00 is Office, not Home). A visit is
+# a run of consecutive stays inside the circle - indoor GPS drift splits a
+# night into many short stays - plus neighbouring stays drifted just
+# outside it (PLACE_LABEL_DRIFT_MARGIN_M). It counts once it lasts at least
+# STAY_INDOOR_MINUTES, so walking past an office stays Outdoor.
 #
 # Categories a label can have; each one is an io type NAME.
 PLACE_LABEL_CATEGORIES = (HOME_NAME, OFFICE_NAME, SCHOOL_NAME, OTHER_INDOOR_NAME)
@@ -66,3 +70,8 @@ PLACE_LABEL_MIN_PING_FRACTION = 0.5
 # inside a much bigger one is not the same spot, so the smaller (more
 # specific) circle is not outvoted by the bigger one.
 PLACE_LABEL_SAME_SPOT_MIN_OVERLAP = 0.5
+# A stay next to a visit (just before or after it) joins the visit if it
+# would match the same category with every circle's radius grown by this
+# much. Absorbs indoor GPS drift of 20-50 m past the circle's edge without
+# letting a walk away from the place join.
+PLACE_LABEL_DRIFT_MARGIN_M = 30.0

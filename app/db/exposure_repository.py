@@ -7,6 +7,10 @@ outdoor trips within the same hour), so callers sum delta_t_hours/
 exposure_value across rows sharing an hour_start_hk+io for the chart, and
 use each row's own lng/lat (ordered by start_time_hk) to draw a route.
 Rows outside Hong Kong have in_hk = 0 and no exposure_value.
+
+A batch replaces the rows of its own time span (replace_hourly), so
+uploading a day again - e.g. after a place label was added - doesn't leave
+the old rows (say Home) next to the new ones (Office) for the same time.
 """
 
 from typing import Any, Dict, List
@@ -18,26 +22,42 @@ def upsert_hourly(rows: List[Dict[str, Any]]) -> None:
     if not rows:
         return
     with get_conn() as conn:
-        conn.executemany(
-            """
-            INSERT INTO hourly_exposure
-                (pid, hour_start_hk, start_time_hk, io, io_source, delta_t_hours, exposure_value, lng, lat, in_hk,
-                 api_result_json)
-            VALUES
-                (:pid, :hour_start_hk, :start_time_hk, :io, :io_source, :delta_t_hours, :exposure_value, :lng, :lat,
-                 :in_hk, :api_result_json)
-            ON CONFLICT(pid, io, start_time_hk) DO UPDATE SET
-                hour_start_hk = excluded.hour_start_hk,
-                io_source = excluded.io_source,
-                delta_t_hours = excluded.delta_t_hours,
-                exposure_value = excluded.exposure_value,
-                lng = excluded.lng,
-                lat = excluded.lat,
-                in_hk = excluded.in_hk,
-                api_result_json = excluded.api_result_json
-            """,
-            rows,
+        _upsert(conn, rows)
+
+
+def replace_hourly(pid: str, from_start_time_hk: str, to_start_time_hk: str, rows: List[Dict[str, Any]]) -> None:
+    """Delete the pid's rows with start_time_hk in [from, to] (HK_TIME_FORMAT
+    strings, which sort as times), then store `rows`, in one transaction."""
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM hourly_exposure WHERE pid = ? AND start_time_hk BETWEEN ? AND ?",
+            (pid, from_start_time_hk, to_start_time_hk),
         )
+        if rows:
+            _upsert(conn, rows)
+
+
+def _upsert(conn, rows: List[Dict[str, Any]]) -> None:
+    conn.executemany(
+        """
+        INSERT INTO hourly_exposure
+            (pid, hour_start_hk, start_time_hk, io, io_source, delta_t_hours, exposure_value, lng, lat, in_hk,
+             api_result_json)
+        VALUES
+            (:pid, :hour_start_hk, :start_time_hk, :io, :io_source, :delta_t_hours, :exposure_value, :lng, :lat,
+             :in_hk, :api_result_json)
+        ON CONFLICT(pid, io, start_time_hk) DO UPDATE SET
+            hour_start_hk = excluded.hour_start_hk,
+            io_source = excluded.io_source,
+            delta_t_hours = excluded.delta_t_hours,
+            exposure_value = excluded.exposure_value,
+            lng = excluded.lng,
+            lat = excluded.lat,
+            in_hk = excluded.in_hk,
+            api_result_json = excluded.api_result_json
+        """,
+        rows,
+    )
 
 
 def get_hourly(pid: str) -> List[Dict[str, Any]]:

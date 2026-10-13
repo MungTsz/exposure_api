@@ -135,6 +135,46 @@ def test_short_stay_in_a_circle_stays_outdoor():
     assert (stays[0].io, stays[0].io_source) == (io_cfg.OUTDOOR_NAME, IoSource.INFERRED.value)
 
 
+
+def test_night_split_by_drift_is_one_office_visit():
+    # Indoor drift hops 22 m every 2 minutes, so every ping is its own short
+    # stay: alone each one is Outdoor; inside an Office circle the hour is Office.
+    offsets = [(0, 0) if i % 2 == 0 else (0, 22) for i in range(30)]
+    pings = [ping(2 * HOUR + i * 120, *at(*o)) for i, o in enumerate(offsets)]
+    stays = group_into_stays(pings + [ping(3 * HOUR, *at(east_m=5000))])
+    assert {s.io for s in registry.label_stays(stays)} == {io_cfg.OUTDOOR_NAME}
+
+    office, far = registry.label_stays(stays, [label("o", OFFICE, 25)])
+    assert (office.io, office.io_source) == (OFFICE, IoSource.LABEL.value)
+    assert (office.start_utc, office.end_utc) == (pings[0].utc, far.start_utc)
+    assert len(office.pings) == 30
+    assert (office.lng, office.lat) == at()
+    assert far.io == io_cfg.OUTDOOR_NAME
+
+
+def test_stay_drifted_just_outside_the_circle_joins_the_visit():
+    # 01:00-01:30 drifted 40 m east (outside the 25 m circle, inside the drift
+    # margin) - on its own a Home stay - then 01:30-02:00 inside the circle.
+    drifted = [ping(HOUR + i * 300, *at(east_m=40)) for i in range(6)]
+    inside = [ping(HOUR + 1800 + i * 300, *at()) for i in range(6)]
+    stays = group_into_stays(drifted + inside + [ping(2 * HOUR, *at(east_m=5000))])
+    assert [s.io for s in registry.label_stays(stays)][:2] == [HOME, HOME]
+
+    office, far = registry.label_stays(stays, [label("o", OFFICE, 25)])
+    assert (office.io, office.start_utc, office.end_utc) == (OFFICE, drifted[0].utc, far.start_utc)
+    assert far.io == io_cfg.OUTDOOR_NAME
+
+
+def test_stay_beyond_the_drift_margin_keeps_the_rules():
+    inside = [ping(HOUR + i * 300, *at()) for i in range(6)]
+    away = [ping(HOUR + 1800 + i * 300, *at(east_m=25 + io_cfg.PLACE_LABEL_DRIFT_MARGIN_M + 20)) for i in range(6)]
+    stays = group_into_stays(inside + away + [ping(2 * HOUR, *at(east_m=5000))])
+    labelled = registry.label_stays(stays, [label("o", OFFICE, 25)])
+    assert [(s.io, s.io_source) for s in labelled[:2]] == [
+        (OFFICE, IoSource.LABEL.value), (HOME, IoSource.INFERRED.value),
+    ]
+
+
 def test_pipeline_slices_carry_io_source():
     lng, lat = at()
     features = [feature(12 * HOUR, lng=lng, lat=lat), feature(12 * HOUR + INDOOR_SECONDS, lng=lng, lat=lat)]
