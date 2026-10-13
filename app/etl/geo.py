@@ -8,7 +8,7 @@ scale.
 """
 
 import math
-from typing import Protocol, Tuple
+from typing import Iterable, Protocol, Tuple
 
 from app.config.constants import EARTH_RADIUS_M
 
@@ -58,6 +58,25 @@ def distance_m(a: HasLngLat, b: HasLngLat) -> float:
 
 def within_circle(circle: HasCircle, p: HasLngLat) -> bool:
     return distance_m(circle, p) <= circle.radius_m
+
+
+# (min_lng, min_lat, max_lng, max_lat) in degrees.
+BBox = Tuple[float, float, float, float]
+
+
+def bbox(points: Iterable[HasLngLat]) -> BBox:
+    """The smallest lat/lng box holding every point (at least one)."""
+    points = list(points)
+    lngs, lats = [p.lng for p in points], [p.lat for p in points]
+    return min(lngs), min(lats), max(lngs), max(lats)
+
+
+def circle_bbox(circle: HasCircle, extra_m: float = 0.0) -> BBox:
+    """The lat/lng box around the circle with its radius grown by extra_m."""
+    r = circle.radius_m + extra_m
+    dlat = math.degrees(r / EARTH_RADIUS_M)
+    dlng = math.degrees(r / (EARTH_RADIUS_M * math.cos(math.radians(circle.lat))))
+    return circle.lng - dlng, circle.lat - dlat, circle.lng + dlng, circle.lat + dlat
 
 
 def circle_overlap_ratio(a: HasCircle, b: HasCircle) -> float:

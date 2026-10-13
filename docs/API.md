@@ -348,10 +348,17 @@ How a stay's io type is chosen:
 Each row in `GET /exposure/hourly/{pid}` says which way it went in
 `io_source`: `"label"` or `"inferred"`.
 
-Labels only affect batches processed **after** the label is stored. Rows
-already stored are not changed until the same pings are uploaded again: a
-batch replaces every stored row of that `pid` whose `start_time_hk` lies
-between its first and last ping.
+Stored rows follow the labels. When a label is created, moved or deleted,
+the server re-runs in the background every stored batch (of every `pid`)
+with a ping within the circle's radius + 30 m, at the old and the new
+position; `GET /ingest/{batch_id}` shows those batches `processing` and then
+`done` again. A batch that a later upload of the same `pid` fully covers is
+skipped. Each re-run calls `expo_calx` again. A batch still being processed
+when the label changes keeps the labels it started with; upload it again
+(or touch the label) to refresh it.
+
+Uploading the same pings again also works: a batch replaces every stored row
+of that `pid` whose `start_time_hk` lies between its first and last ping.
 
 Labels outside Hong Kong may be stored. They still set the `io` of rows
 there, but those rows are never sent to `expo_calx`.

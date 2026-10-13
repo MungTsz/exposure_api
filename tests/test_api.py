@@ -9,6 +9,7 @@ from app.clients import praise_client
 from app.config import io_types as io_cfg
 from app.config.constants import BatchStatus
 from app.config.settings import get_settings
+from app.services import label_service
 from tests.conftest import feature, gpx_document
 
 INDOOR_SECONDS = io_cfg.STAY_INDOOR_MINUTES * 60
@@ -266,15 +267,82 @@ def test_ingest_uses_place_labels(client, monkeypatch):
 
 
 def test_ingest_again_replaces_the_old_rows(client, monkeypatch):
-    # 00:00 HK: Home by the rules. After an Office label, the same upload
-    # must replace the Home row, not sit next to it.
+    # 00:00 HK: Home by the rules. With an Office label (auto re-run turned
+    # off here), the same upload must replace the Home row, not sit next to it.
     monkeypatch.setattr(praise_client, "calculate_exposure", _fake_exposure)
-    body = {"pid": "p1", "features": [feature(0, **HK), feature(INDOOR_SECONDS, **HK)]}
-    client.post("/ingest", json={**body, "pid": "p2"})
-    client.post("/ingest", json=body)
-    assert [r["io"] for r in client.get("/exposure/hourly/p1").json()] == [io_cfg.HOME_NAME]
+    monkeypatch.setattr(label_service, "reprocess_near", lambda labels: None)
+    client.post("/ingest", json={**NIGHT, "pid": "p2"})
+    client.post("/ingest", json=NIGHT)
+    assert _ios(client, "p1") == [HOME_INFERRED]
 
     client.put("/place-labels/l1", json=LABEL)
-    client.post("/ingest", json=body)
-    assert [(r["io"], r["io_source"]) for r in client.get("/exposure/hourly/p1").json()] == [(io_cfg.OFFICE_NAME, "label")]
-    assert [r["io"] for r in client.get("/exposure/hourly/p2").json()] == [io_cfg.HOME_NAME]  # other pid untouched
+    client.post("/ingest", json=NIGHT)
+    assert _ios(client, "p1") == [OFFICE_LABEL]
+    assert _ios(client, "p2") == [HOME_INFERRED]  # not uploaded again
+
+
+# --- re-running stored batches when a label changes ---
+
+NIGHT = {"pid": "p1", "features": [feature(0, **HK), feature(INDOOR_SECONDS, **HK)]}  # 00:00 HK: Home
+HOME_INFERRED = (io_cfg.HOME_NAME, "inferred")
+OFFICE_LABEL = (io_cfg.OFFICE_NAME, "label")
+
+
+def _ios(client, pid):
+    return [(r["io"], r["io_source"]) for r in client.get(f"/exposure/hourly/{pid}").json()]
+
+
+def _counting_exposure(monkeypatch):
+    calls = []
+
+    def fake(rows):
+        calls.append(rows)
+        return _fake_exposure(rows)
+
+    monkeypatch.setattr(praise_client, "calculate_exposure", fake)
+    return calls
+
+
+def test_label_change_updates_stored_rows(client, monkeypatch):
+    _counting_exposure(monkeypatch)
+    client.post("/ingest", json=NIGHT)
+    client.post("/ingest", json={**NIGHT, "pid": "p2"})
+    assert _ios(client, "p1") == [HOME_INFERRED]
+
+    assert client.put("/place-labels/l1", json=LABEL).status_code == 201
+    assert _ios(client, "p1") == _ios(client, "p2") == [OFFICE_LABEL]  # labels are shared
+
+    moved = {**LABEL, "lat": HK["lat"] + 0.005, "updated_at": "2026-10-14T00:00:00+08:00"}  # ~550 m north
+    assert client.put("/place-labels/l1", json=moved).status_code == 200
+    assert _ios(client, "p1") == [HOME_INFERRED]  # re-run at the old position
+
+    client.put("/place-labels/l1", json={**LABEL, "updated_at": "2026-10-15T00:00:00+08:00"})
+    assert _ios(client, "p1") == [OFFICE_LABEL]
+    client.delete("/place-labels/l1", params={"contributor_id": LABEL["contributor_id"]})
+    assert _ios(client, "p1") == [HOME_INFERRED]
+
+
+def test_label_change_reruns_only_batches_near_it(client, monkeypatch):
+    calls = _counting_exposure(monkeypatch)
+    client.post("/ingest", json=NIGHT)
+    calls.clear()
+
+    far = {**LABEL, "lat": HK["lat"] + 0.005}
+    client.put("/place-labels/far", json=far)
+    assert calls == []
+
+    client.put("/place-labels/l1", json=LABEL)
+    assert len(calls) == 1
+    client.put("/place-labels/l1", json=LABEL)  # stale updated_at: ignored, nothing re-run
+    assert len(calls) == 1
+
+
+def test_label_change_skips_batches_a_later_upload_covers(client, monkeypatch):
+    calls = _counting_exposure(monkeypatch)
+    client.post("/ingest", json=NIGHT)
+    client.post("/ingest", json=NIGHT)  # the same day uploaded again
+    calls.clear()
+
+    client.put("/place-labels/l1", json=LABEL)
+    assert len(calls) == 1  # only the later upload re-ran
+    assert _ios(client, "p1") == [OFFICE_LABEL]

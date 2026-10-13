@@ -35,6 +35,14 @@ CREATE TABLE IF NOT EXISTS ingest_batches (
     error_detail TEXT,
     hours_processed INTEGER,
     rows INTEGER,
+    -- Where and when the batch's pings are, so a place label change can find
+    -- the batches to re-run. NULL for batches stored before these columns.
+    min_lng REAL,
+    min_lat REAL,
+    max_lng REAL,
+    max_lat REAL,
+    first_ping_utc TEXT,           -- UTC ISO 8601
+    last_ping_utc TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -59,6 +67,12 @@ ADDED_COLUMNS: List[Tuple[str, str, str]] = [
     ("hourly_exposure", "api_result_json", "TEXT"),
     ("hourly_exposure", "in_hk", "INTEGER NOT NULL DEFAULT 1"),
     ("hourly_exposure", "io_source", f"TEXT NOT NULL DEFAULT '{IoSource.INFERRED.value}'"),
+    ("ingest_batches", "min_lng", "REAL"),
+    ("ingest_batches", "min_lat", "REAL"),
+    ("ingest_batches", "max_lng", "REAL"),
+    ("ingest_batches", "max_lat", "REAL"),
+    ("ingest_batches", "first_ping_utc", "TEXT"),
+    ("ingest_batches", "last_ping_utc", "TEXT"),
 ]
 
 # SQL expression for "now" in the timestamp format the tables use.

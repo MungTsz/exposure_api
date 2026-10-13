@@ -65,10 +65,11 @@ async def ingest_gpx(
 
 
 def _queue_batch(pid: str, features: List[Dict[str, Any]], background_tasks: BackgroundTasks) -> IngestQueued:
-    if not parse_pings(features):
+    pings = parse_pings(features)
+    if not pings:
         raise HTTPException(400, "no valid pings in request")
 
-    batch_id = batch_repository.create_batch(pid, features)
+    batch_id = batch_repository.create_batch(pid, features, pings)
     logger.info("pid=%s queued batch=%d with %d raw features", pid, batch_id, len(features))
     background_tasks.add_task(ingest_service.process_batch, batch_id, pid, features)
     return IngestQueued(status=INGEST_QUEUED_STATUS, batch_id=batch_id)

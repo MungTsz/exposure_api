@@ -4,7 +4,7 @@ import pytest
 
 from app.config import io_types as io_cfg
 from app.config.constants import EARTH_RADIUS_M, IoSource
-from app.etl.geo import circle_overlap_ratio
+from app.etl.geo import circle_bbox, circle_overlap_ratio
 from app.etl.pipeline import run_pipeline
 from app.etl.stays import group_into_stays
 from app.io_types import registry
@@ -60,6 +60,16 @@ def test_circle_overlap_ratio():
 
 
 # --- matching ---
+
+
+def test_circle_bbox_holds_the_grown_circle():
+    c = label("a", HOME, 25)
+    min_lng, min_lat, max_lng, max_lat = circle_bbox(c, 30)
+    for east, north in ((55, 0), (-55, 0), (0, 55), (0, -55)):
+        lng, lat = at(east * 0.999, north * 0.999)
+        assert min_lng <= lng <= max_lng and min_lat <= lat <= max_lat
+    lng, lat = at(east_m=56)
+    assert not (min_lng <= lng <= max_lng)
 
 def test_label_needs_half_the_pings():
     labels = [label("a", OFFICE, 10)]

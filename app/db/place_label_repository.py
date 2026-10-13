@@ -36,13 +36,19 @@ def _get(conn, label_id: str) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
+def to_place_label(stored: Dict[str, Any]) -> PlaceLabel:
+    """A stored label (as upsert/delete return it) as a PlaceLabel."""
+    return PlaceLabel(**{k: stored[k] for k in ("label_id", "contributor_id", "category", "lng", "lat", "radius_m")})
+
+
 def upsert(
     label_id: str, contributor_id: str, category: str, lat: float, lng: float, radius_m: float,
     updated_at: datetime,
-) -> Tuple[UpsertOutcome, Optional[Dict[str, Any]]]:
+) -> Tuple[UpsertOutcome, Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """Create or update a label, unless it belongs to another contributor or
-    the stored copy is as new or newer. Returns the outcome and the label as
-    now stored (None if FORBIDDEN). `updated_at` must be timezone-aware."""
+    the stored copy is as new or newer. Returns the outcome, the label as now
+    stored (None if FORBIDDEN) and the label as stored before (None unless
+    UPDATED). `updated_at` must be timezone-aware."""
     values = {
         "label_id": label_id, "contributor_id": contributor_id, "category": category,
         "lat": lat, "lng": lng, "radius_m": radius_m, "updated_at": _to_utc_iso(updated_at),
@@ -57,11 +63,11 @@ def upsert(
                 "VALUES (:label_id, :contributor_id, :category, :lat, :lng, :radius_m, :updated_at)",
                 values,
             )
-            return UpsertOutcome.CREATED, values
+            return UpsertOutcome.CREATED, values, None
         if stored["contributor_id"] != contributor_id:
-            return UpsertOutcome.FORBIDDEN, None
+            return UpsertOutcome.FORBIDDEN, None, None
         if datetime.fromisoformat(stored["updated_at"]) >= updated_at:
-            return UpsertOutcome.IGNORED, stored
+            return UpsertOutcome.IGNORED, stored, None
         conn.execute(
             """
             UPDATE place_labels
@@ -70,23 +76,24 @@ def upsert(
             """,
             values,
         )
-        return UpsertOutcome.UPDATED, values
+        return UpsertOutcome.UPDATED, values, stored
 
 
-def delete(label_id: str, contributor_id: str) -> DeleteOutcome:
+def delete(label_id: str, contributor_id: str) -> Tuple[DeleteOutcome, Optional[Dict[str, Any]]]:
+    """Returns the outcome and, if DELETED, the label as it was stored."""
     with get_conn() as conn:
         conn.execute("BEGIN IMMEDIATE")
         stored = _get(conn, label_id)
         if stored is None:
-            return DeleteOutcome.NOT_FOUND
+            return DeleteOutcome.NOT_FOUND, None
         if stored["contributor_id"] != contributor_id:
-            return DeleteOutcome.FORBIDDEN
+            return DeleteOutcome.FORBIDDEN, None
         conn.execute("DELETE FROM place_labels WHERE label_id = ?", (label_id,))
-        return DeleteOutcome.DELETED
+        return DeleteOutcome.DELETED, stored
 
 
 def get_all() -> List[PlaceLabel]:
     """Every stored label, for classifying stays. Internal use only."""
     with get_conn() as conn:
         cur = conn.execute("SELECT label_id, contributor_id, category, lng, lat, radius_m FROM place_labels")
-        return [PlaceLabel(**dict(r)) for r in cur.fetchall()]
+        return [to_place_label(dict(r)) for r in cur.fetchall()]
