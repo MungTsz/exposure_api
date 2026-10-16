@@ -14,10 +14,18 @@ def _to_utc_iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat(timespec="microseconds")
 
 
-def create_batch(pid: str, features: List[Dict[str, Any]], pings: List[Ping]) -> int:
+def _parse_utc(value: Optional[str]) -> Optional[datetime]:
+    return datetime.fromisoformat(value) if value else None
+
+
+def create_batch(
+    pid: str, features: List[Dict[str, Any]], pings: List[Ping], status: BatchStatus = BatchStatus.PENDING,
+) -> int:
     """Store a raw batch. `pings` are its parsed, time-sorted pings (at least
     one); their box and time span are kept to find the batch again when a
-    place label near it changes."""
+    place label near it changes. `status` is DONE only for a part split off
+    an already processed batch (app/services/day_service.py): its rows are
+    stored already, so it must not be resumed as a backlog on startup."""
     min_lng, min_lat, max_lng, max_lat = bbox(pings)
     with get_conn() as conn:
         cur = conn.execute(
@@ -26,10 +34,56 @@ def create_batch(pid: str, features: List[Dict[str, Any]], pings: List[Ping]) ->
                 (pid, features_json, status, min_lng, min_lat, max_lng, max_lat, first_ping_utc, last_ping_utc)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (pid, json.dumps(features), BatchStatus.PENDING.value, min_lng, min_lat, max_lng, max_lat,
+            (pid, json.dumps(features), status.value, min_lng, min_lat, max_lng, max_lat,
              _to_utc_iso(pings[0].utc), _to_utc_iso(pings[-1].utc)),
         )
         return cur.lastrowid
+
+
+def replace_features(batch_id: int, features: List[Dict[str, Any]], pings: List[Ping]) -> None:
+    """Swap a stored batch's records (and with them its box and time span)
+    for a subset of them; `pings` as in create_batch. Status and counts stay:
+    the rows of the records it keeps are stored already."""
+    min_lng, min_lat, max_lng, max_lat = bbox(pings)
+    with get_conn() as conn:
+        conn.execute(
+            f"""
+            UPDATE ingest_batches
+            SET features_json = ?, min_lng = ?, min_lat = ?, max_lng = ?, max_lat = ?,
+                first_ping_utc = ?, last_ping_utc = ?, updated_at = {NOW_SQL}
+            WHERE id = ?
+            """,
+            (json.dumps(features), min_lng, min_lat, max_lng, max_lat,
+             _to_utc_iso(pings[0].utc), _to_utc_iso(pings[-1].utc), batch_id),
+        )
+
+
+def delete_batch(batch_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM ingest_batches WHERE id = ?", (batch_id,))
+
+
+def get_for_pid(pid: str) -> List[Dict[str, Any]]:
+    """Every batch of one pid, oldest first, with its records.
+    first/last_ping_utc are datetimes, or None for batches stored before
+    they were recorded."""
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            SELECT id, status, features_json, first_ping_utc, last_ping_utc
+            FROM ingest_batches
+            WHERE pid = ?
+            ORDER BY id
+            """,
+            (pid,),
+        )
+        return [
+            {
+                "id": r["id"], "status": r["status"], "features": json.loads(r["features_json"]),
+                "first_ping_utc": _parse_utc(r["first_ping_utc"]), "last_ping_utc": _parse_utc(r["last_ping_utc"]),
+            }
+            for r in cur.fetchall()
+        ]
 
 
 def mark_processing(batch_id: int) -> None:
@@ -106,8 +160,8 @@ def find_near(box: BBox) -> List[Dict[str, Any]]:
         return [
             {
                 "id": r["id"], "pid": r["pid"], "features": json.loads(r["features_json"]),
-                "first_ping_utc": datetime.fromisoformat(r["first_ping_utc"]) if r["first_ping_utc"] else None,
-                "last_ping_utc": datetime.fromisoformat(r["last_ping_utc"]) if r["last_ping_utc"] else None,
+                "first_ping_utc": _parse_utc(r["first_ping_utc"]),
+                "last_ping_utc": _parse_utc(r["last_ping_utc"]),
             }
             for r in cur.fetchall()
         ]

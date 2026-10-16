@@ -1,6 +1,6 @@
 """Request and response bodies for the HTTP API."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import AwareDatetime, BaseModel, Field
@@ -62,3 +62,9 @@ class HourlyRow(BaseModel):
     lat: Optional[float] = None
     # False = outside Hong Kong: not scored by expo_calx, exposure_value is null.
     in_hk: bool
+
+
+class DayDeleted(BaseModel):
+    pid: str
+    date: date  # HK local
+    rows_deleted: int  # 0 if the day had no data

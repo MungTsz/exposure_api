@@ -29,8 +29,8 @@ All settings come from `app/config/settings.py` (pydantic-settings): env vars fi
 
 ```
 app/main.py           create_app(); lifespan inits DB and resumes pending/processing batches in a thread
-app/api/              schemas.py + body_limit.py (413 middleware) + routes/ingest.py (POST /ingest, POST /ingest/gpx, GET /ingest/{id}) + routes/exposure.py (GET /exposure/hourly/{pid}) + routes/place_labels.py (PUT/DELETE /place-labels/{label_id})
-app/services/         ingest_service.process_batch: place_label_repository.get_all -> run_pipeline -> to_request_rows (in-HK slices only) -> praise_client -> exposure_repository (all slices); label_service.reprocess_near re-runs stored batches after a label change
+app/api/              schemas.py + body_limit.py (413 middleware) + routes/ingest.py (POST /ingest, POST /ingest/gpx, GET /ingest/{id}) + routes/exposure.py (GET /exposure/hourly/{pid}, DELETE /exposure/hourly/{pid}?date=) + routes/place_labels.py (PUT/DELETE /place-labels/{label_id})
+app/services/         ingest_service.process_batch: place_label_repository.get_all -> run_pipeline -> to_request_rows (in-HK slices only) -> praise_client -> exposure_repository (all slices); label_service.reprocess_near re-runs stored batches after a label change; day_service.delete_day deletes one HK day of a pid (rows + that day's records in its stored batches, splitting a batch that spans the day, under label_service.rerun_lock) so a label re-run can't write it back
 app/etl/              pure functions, no I/O; pipeline.run_pipeline(records, place_labels) defines the step order
 app/io_types/         registry (ordered IO_TYPES, classify, label_stays) + base.IoType + place_labels (PlaceLabel, match_place_label) + rules/<type>.py
 app/clients/          praise_client: expo_calx calls, batching, parallel up to a process-wide cap, ExposureResult(t, pid, value, raw)

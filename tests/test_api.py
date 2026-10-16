@@ -9,7 +9,7 @@ from app.clients import praise_client
 from app.config import io_types as io_cfg
 from app.config.constants import BatchStatus
 from app.config.settings import get_settings
-from app.services import label_service
+from app.services import ingest_service, label_service
 from tests.conftest import feature, gpx_document
 
 INDOOR_SECONDS = io_cfg.STAY_INDOOR_MINUTES * 60
@@ -346,3 +346,84 @@ def test_label_change_skips_batches_a_later_upload_covers(client, monkeypatch):
     client.put("/place-labels/l1", json=LABEL)
     assert len(calls) == 1  # only the later upload re-ran
     assert _ios(client, "p1") == [OFFICE_LABEL]
+
+
+# --- deleting one day ---
+
+DAY_SECONDS = 24 * 3600
+NEXT_NIGHT = {"pid": "p1", "features": [feature(DAY_SECONDS, **HK), feature(DAY_SECONDS + INDOOR_SECONDS, **HK)]}
+
+
+def _days(client, pid):
+    return sorted({r["start_time_hk"][:8] for r in client.get(f"/exposure/hourly/{pid}").json()})
+
+
+def _delete_day(client, day, pid="p1"):
+    return client.delete(f"/exposure/hourly/{pid}", params={"date": day})
+
+
+def test_delete_day_removes_only_that_day_of_that_pid(client, monkeypatch):
+    monkeypatch.setattr(praise_client, "calculate_exposure", _fake_exposure)
+    client.post("/ingest", json=NIGHT)
+    client.post("/ingest", json=NEXT_NIGHT)
+    client.post("/ingest", json={**NIGHT, "pid": "p2"})
+
+    resp = _delete_day(client, "2026-08-30")
+    assert resp.status_code == 200
+    assert resp.json() == {"pid": "p1", "date": "2026-08-30", "rows_deleted": 1}
+    assert _days(client, "p1") == ["20260831"]
+    assert _days(client, "p2") == ["20260830"]
+
+    assert _delete_day(client, "2026-08-30").json()["rows_deleted"] == 0  # already gone
+
+
+def test_deleted_day_can_be_uploaded_again(client, monkeypatch):
+    monkeypatch.setattr(praise_client, "calculate_exposure", _fake_exposure)
+    client.post("/ingest", json=NIGHT)
+    _delete_day(client, "2026-08-30")
+    assert _days(client, "p1") == []
+
+    client.post("/ingest", json=NIGHT)
+    assert _days(client, "p1") == ["20260830"]
+
+
+def test_deleted_day_stays_deleted_after_a_label_change(client, monkeypatch):
+    calls = _counting_exposure(monkeypatch)
+    client.post("/ingest", json=NIGHT)
+    _delete_day(client, "2026-08-30")
+    calls.clear()
+
+    client.put("/place-labels/l1", json=LABEL)
+    assert calls == []  # its batch is gone, nothing to re-run
+    assert _days(client, "p1") == []
+
+
+def test_delete_day_keeps_the_other_days_of_a_multi_day_upload(client, monkeypatch):
+    _counting_exposure(monkeypatch)
+    nights = [f for d in range(3) for f in (feature(d * DAY_SECONDS, **HK), feature(d * DAY_SECONDS + INDOOR_SECONDS, **HK))]
+    client.post("/ingest", json={"pid": "p1", "features": nights})
+    assert _days(client, "p1") == ["20260830", "20260831", "20260901"]
+
+    _delete_day(client, "2026-08-31")
+    assert _days(client, "p1") == ["20260830", "20260901"]
+
+    # Both remaining parts re-run (each night becomes Office), and neither
+    # writes the middle day back.
+    client.put("/place-labels/l1", json=LABEL)
+    assert _days(client, "p1") == ["20260830", "20260901"]
+    ios = {r["start_time_hk"]: (r["io"], r["io_source"]) for r in client.get("/exposure/hourly/p1").json()}
+    assert ios["20260830000000"] == ios["20260901000000"] == OFFICE_LABEL
+
+
+def test_delete_day_while_its_upload_is_processing_is_409(client, monkeypatch):
+    monkeypatch.setattr(ingest_service, "process_batch", lambda *args: None)  # leave the batch pending
+    client.post("/ingest", json=NIGHT)
+
+    assert _delete_day(client, "2026-08-30").status_code == 409
+    assert _delete_day(client, "2026-08-31").status_code == 200  # other days are free
+
+
+@pytest.mark.parametrize("day", ["2026-13-01", "yesterday"])
+def test_delete_day_with_a_bad_date_is_422(client, day):
+    assert _delete_day(client, day).status_code == 422
+    assert client.delete("/exposure/hourly/p1").status_code == 422  # date missing

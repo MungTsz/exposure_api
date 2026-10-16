@@ -37,6 +37,17 @@ def replace_hourly(pid: str, from_start_time_hk: str, to_start_time_hk: str, row
             _upsert(conn, rows)
 
 
+def delete_between(pid: str, from_start_time_hk: str, to_start_time_hk: str) -> int:
+    """Delete the pid's rows with start_time_hk in [from, to] (as in
+    replace_hourly); returns how many rows went."""
+    with get_conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM hourly_exposure WHERE pid = ? AND start_time_hk BETWEEN ? AND ?",
+            (pid, from_start_time_hk, to_start_time_hk),
+        )
+        return cur.rowcount
+
+
 def _upsert(conn, rows: List[Dict[str, Any]]) -> None:
     conn.executemany(
         """

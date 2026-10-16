@@ -26,14 +26,16 @@ logger = logging.getLogger(__name__)
 
 # One re-run at a time: each one reads the labels when it starts, so the last
 # to run - queued by the newest label change - always sees the newest labels.
-_lock = threading.Lock()
+# Also held by day_service.delete_day, so a re-run can't write a day's rows
+# back from a batch while that day is being cut out of it.
+rerun_lock = threading.Lock()
 
 
 def reprocess_near(labels: Sequence[PlaceLabel]) -> None:
     """Re-run every finished batch with a ping near any of `labels` (the
     label as now stored and/or as it was before). Never raises."""
     try:
-        with _lock:
+        with rerun_lock:
             batches = _batches_near(labels)
             logger.info(
                 "place label change: re-running %d batch(es) %s",

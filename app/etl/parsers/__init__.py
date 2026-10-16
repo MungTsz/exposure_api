@@ -33,13 +33,27 @@ PARSERS: List[Parser] = [
 ]
 
 
+def find_parser(record: Dict[str, Any]) -> Optional[Parser]:
+    """The first parser that accepts `record`, or None."""
+    return next((p for p in PARSERS if p.can_parse(record)), None)
+
+
+def parse_record(record: Dict[str, Any]) -> Optional[Ping]:
+    """One record's Ping, or None if no parser recognizes it or its parser
+    drops it. Doesn't log: used to sort a stored batch's records one by one
+    (see app/services/day_service.py), where parse_pings's warning would
+    repeat once per record."""
+    parser = find_parser(record)
+    return parser.parse(record) if parser else None
+
+
 def parse_pings(records: List[Dict[str, Any]]) -> List[Ping]:
     """Parse raw records into a time-sorted Ping list. Records no parser
     recognizes are skipped and logged."""
     pings: List[Ping] = []
     unrecognized = 0
     for record in records:
-        parser = next((p for p in PARSERS if p.can_parse(record)), None)
+        parser = find_parser(record)
         if parser is None:
             unrecognized += 1
             continue

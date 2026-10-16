@@ -129,6 +129,7 @@ copy-paste examples - is in **[docs/API.md](docs/API.md)**.
 | `POST /ingest/gpx?pid=...` | same, but the body is a whole GPX file |
 | `GET /ingest/{batch_id}` | poll a batch's processing status |
 | `GET /exposure/hourly/{pid}` | read back the hourly rows; each has `in_hk`, and rows outside Hong Kong have no `exposure_value` |
+| `DELETE /exposure/hourly/{pid}?date=YYYY-MM-DD` | delete one HK-local day of a pid's rows (and its pings in stored uploads), e.g. before re-importing it |
 | `PUT /place-labels/{label_id}` | create or update a place label (idempotent) |
 | `DELETE /place-labels/{label_id}?contributor_id=...` | delete a place label |
 

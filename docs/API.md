@@ -30,6 +30,7 @@ serves interactive docs generated from the code:
   - [Upload a GPX file](#upload-a-gpx-file)
   - [Poll a batch](#poll-a-batch)
   - [Read hourly exposure](#read-hourly-exposure)
+  - [Delete one day](#delete-one-day)
   - [Create or update a place label](#create-or-update-a-place-label)
   - [Delete a place label](#delete-a-place-label)
 - [Errors](#errors)
@@ -509,6 +510,28 @@ More than one row can share an `hour_start_hk` + `io` (scenario 2).
 The full `expo_calx` result item for each scored row is also kept in the
 DB column `api_result_json`, so new fields the API adds aren't lost.
 
+### Delete one day
+
+`DELETE /exposure/hourly/{pid}?date=YYYY-MM-DD` - delete every row of
+`pid` whose `start_time_hk` is on that HK-local day, e.g. to remove a wrong
+import. The day's pings are also cut out of the stored uploads, so a later
+place label change can't bring the day back; the uploads' other days are
+kept. To re-import the day, upload it again as usual.
+
+Response `200`:
+
+```json
+{"pid": "p1", "date": "2026-08-30", "rows_deleted": 12}
+```
+
+`rows_deleted` is `0` for a day with no data, so the call is safe to retry.
+
+| status | when |
+|---|---|
+| `200` | deleted (or nothing to delete) |
+| `409` `{"detail": "an upload for this day is still being processed"}` | an upload with pings on that day is still `pending`/`processing`; nothing changes |
+| `422` | `date` missing or not a valid `YYYY-MM-DD` date |
+
 ### Create or update a place label
 
 `PUT /place-labels/{label_id}` - store a label, or update it if
@@ -560,6 +583,8 @@ Every error body is JSON with a `detail` field.
 | `422` | `POST /ingest` | `pid`/`features` missing or wrong type | fix the request body |
 | `422` | `POST /ingest/gpx` | `pid` query parameter missing | add `?pid=...` |
 | `404` | `GET /ingest/{batch_id}` | unknown `batch_id` | |
+| `409` | `DELETE /exposure/hourly/{pid}` | an upload for that day is still processing | wait for its batch to finish, then retry |
+| `422` | `DELETE /exposure/hourly/{pid}` | `date` missing or invalid | send `?date=YYYY-MM-DD` |
 | `403` | `PUT`, `DELETE /place-labels/{label_id}` | the label belongs to another `contributor_id` | don't retry; use a new `label_id` for a new label |
 | `404` | `DELETE /place-labels/{label_id}` | no such label | treat as already deleted |
 | `422` | `PUT /place-labels/{label_id}` | invalid field (see the endpoint) | fix the request body |
