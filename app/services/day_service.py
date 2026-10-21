@@ -22,8 +22,8 @@ from typing import Any, Dict, List, Tuple
 
 from app.config.constants import HK_OFFSET, HK_TIME_FORMAT, BatchStatus
 from app.db import batch_repository, exposure_repository
-from app.etl.models import Ping
-from app.etl.parsers import parse_record
+from app.pipeline.models import Ping
+from app.pipeline.parsers import parse_record
 from app.services import label_service
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ def _cut_day(pid: str, batch: Dict[str, Any], start_utc: datetime, end_utc: date
             on_day += 1
 
     # Records on both sides still need splitting even with none on the day:
-    # the stay bridging the gap produced rows on it.
+    # the run bridging the gap produced rows on it.
     if on_day == 0 and not (before and after):
         return
 

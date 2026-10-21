@@ -4,7 +4,7 @@ rows already stored follow the labels (e.g. a night stored as Home becomes
 Office once someone puts an Office circle there).
 
 A label can only change a stay with a ping within its radius plus
-PLACE_LABEL_DRIFT_MARGIN_M (see app/io_types/registry.py), so only batches
+PLACE_LABEL_DRIFT_MARGIN_M (see app/pipeline/classify.py), so only batches
 with such a ping are re-run. process_batch loads the current labels and
 replaces the batch's own rows, so re-running is all it takes. Every re-run
 calls expo_calx again, for every pid near the label (labels are shared).
@@ -12,14 +12,12 @@ calls expo_calx again, for every pid near the label (labels are shared).
 
 import logging
 import threading
-from dataclasses import replace
 from typing import Any, Dict, List, Sequence
 
-from app.config import io_types as io_cfg
 from app.db import batch_repository
-from app.etl.geo import circle_bbox, within_circle
-from app.etl.parsers import parse_pings
-from app.io_types.place_labels import PlaceLabel
+from app.pipeline.geo import circle_bbox, within_circle
+from app.pipeline.parsers import parse_pings
+from app.pipeline.place_labels import PlaceLabel, grow
 from app.services import ingest_service
 
 logger = logging.getLogger(__name__)
@@ -48,8 +46,7 @@ def reprocess_near(labels: Sequence[PlaceLabel]) -> None:
 
 def _batches_near(labels: Sequence[PlaceLabel]) -> List[Dict[str, Any]]:
     found: Dict[int, Dict[str, Any]] = {}
-    for label in labels:
-        grown = replace(label, radius_m=label.radius_m + io_cfg.PLACE_LABEL_DRIFT_MARGIN_M)
+    for grown in grow(labels):
         for batch in batch_repository.find_near(circle_bbox(grown)):
             if batch["id"] not in found and any(within_circle(grown, p) for p in parse_pings(batch["features"])):
                 found[batch["id"]] = batch

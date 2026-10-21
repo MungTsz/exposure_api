@@ -10,8 +10,8 @@ from starlette.concurrency import run_in_threadpool
 from app.api.schemas import BatchStatusOut, IngestQueued, IngestRequest
 from app.config.constants import GPX_MEDIA_TYPE, INGEST_QUEUED_STATUS
 from app.db import batch_repository
-from app.etl.parsers import parse_pings
-from app.etl.parsers.gpx import GpxError, read_gpx
+from app.pipeline.parsers import parse_pings
+from app.pipeline.parsers.gpx import GpxError, read_gpx
 from app.services import ingest_service
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ async def ingest_gpx(
     pid: str = Query(..., description="person/device id; every result row is stored under it"),
 ) -> IngestQueued:
     """Same as POST /ingest, but the body is a whole GPX file. Each <trkpt>
-    becomes one stored record (see app/etl/parsers/gpx.py)."""
+    becomes one stored record (see app/pipeline/parsers/gpx.py)."""
     data = await request.body()
     try:
         records = read_gpx(data)

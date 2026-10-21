@@ -6,8 +6,8 @@ from typing import Any, Dict, List, Optional
 
 from app.config.constants import BatchStatus
 from app.db.connection import NOW_SQL, get_conn
-from app.etl.geo import BBox, bbox
-from app.etl.models import Ping
+from app.pipeline.geo import BBox, bbox
+from app.pipeline.models import Ping
 
 
 def _to_utc_iso(dt: datetime) -> str:

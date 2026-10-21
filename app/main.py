@@ -1,7 +1,8 @@
 """
 FastAPI entry point: `uvicorn app.main:app` from the repo root.
 
-On startup the DB schema is created/updated and any batch left
+On startup the road centrelines are loaded (the app refuses to start
+without them), the DB schema is created/updated and any batch left
 pending/processing by a previous run (e.g. a crash mid-batch) is resumed in
 a background thread.
 """
@@ -18,13 +19,14 @@ from app.config.constants import APP_TITLE, LOG_FORMAT
 from app.config.settings import get_settings
 from app.db import batch_repository
 from app.db.connection import init_db
-from app.services import ingest_service
+from app.services import ingest_service, road_service
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    road_service.get_road_index()  # raises RoadDataMissing if the file is not there
     init_db()
     incomplete = batch_repository.get_incomplete_batches()
     if incomplete:

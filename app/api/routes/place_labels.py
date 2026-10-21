@@ -1,6 +1,6 @@
 """PUT /place-labels/{label_id} (create or update) and DELETE
 /place-labels/{label_id}. Labels are shared by every pid when stays are
-classified (app/io_types/place_labels.py); there is deliberately no
+classified (app/pipeline/place_labels.py); there is deliberately no
 endpoint that lists them, because Home circles are sensitive.
 
 Every change that stores or removes a label re-runs, in the background, the

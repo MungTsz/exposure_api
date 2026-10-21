@@ -1,4 +1,4 @@
-﻿import json
+import json
 import sqlite3
 
 import pytest
@@ -9,10 +9,10 @@ from app.clients import praise_client
 from app.config import io_types as io_cfg
 from app.config.constants import BatchStatus
 from app.config.settings import get_settings
-from app.services import ingest_service, label_service
-from tests.conftest import feature, gpx_document
+from app.services import ingest_service, label_service, road_service
+from tests.conftest import T0, feature, gpx_document, pings_along
 
-INDOOR_SECONDS = io_cfg.STAY_INDOOR_MINUTES * 60
+INDOOR_SECONDS = io_cfg.INDOOR_MIN_S
 HK = {"lng": 114.158, "lat": 22.282}        # Central, Hong Kong
 OUTSIDE_HK = {"lng": 113.550, "lat": 22.190}  # Macau
 
@@ -44,8 +44,9 @@ def test_ingest_then_read_hourly(client, monkeypatch):
 
     rows = client.get("/exposure/hourly/p1").json()
     assert rows == [{
-        "hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": io_cfg.HOME_NAME,
-        "io_source": "inferred", "delta_t_hours": INDOOR_SECONDS / 3600, "exposure_value": 2.5, "lng": 114.158, "lat": 22.282,
+        "hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": io_cfg.HOME,
+        "io_source": "inferred", "reason": "night_stay", "kind": "stay", "delta_t_hours": INDOOR_SECONDS / 3600,
+        "exposure_value": 2.5, "lng": 114.158, "lat": 22.282, "heading_deg": None, "compass": None, "road_name": None,
         "in_hk": True,
     }]
 
@@ -135,6 +136,29 @@ def test_expo_calx_failure_marks_batch_error(client, monkeypatch):
     assert status["error_detail"] == "expo_calx call timed out: read timed out apikey=REDACTED"
 
 
+def test_a_walk_comes_back_as_route_points_with_direction(client, monkeypatch):
+    monkeypatch.setattr(praise_client, "calculate_exposure", _fake_exposure)
+    walk = pings_along(12 * 3600, 12 * 3600 + 600, 5, velocity_mps=(1.3, 0))  # 780 m east, noon
+    features = [feature((p.utc - T0).total_seconds(), lng=p.lng, lat=p.lat) for p in walk]
+    client.post("/ingest", json={"pid": "p1", "features": features})
+
+    rows = client.get("/exposure/hourly/p1").json()
+    assert 2 <= len(rows) < len(walk) / 10
+    assert {(r["io"], r["reason"], r["kind"], r["compass"]) for r in rows} == {(io_cfg.OUTDOOR, "walk", "route", "E")}
+    assert sum(r["delta_t_hours"] for r in rows) == 600 / 3600
+
+
+def test_app_refuses_to_start_without_road_data(monkeypatch, tmp_path):
+    from app.main import create_app
+
+    monkeypatch.setenv("ROAD_CENTRELINES_PATH", str(tmp_path / "missing.geojson"))
+    get_settings.cache_clear()
+    road_service.get_road_index.cache_clear()
+    with pytest.raises(road_service.RoadDataMissing, match="missing.geojson"):
+        with TestClient(create_app()):
+            pass
+
+
 def test_ingest_gpx_then_read_hourly(client, monkeypatch):
     monkeypatch.setattr(praise_client, "calculate_exposure", _fake_exposure)
     data = gpx_document([(0, HK["lng"], HK["lat"]), (INDOOR_SECONDS, HK["lng"], HK["lat"])])
@@ -147,7 +171,7 @@ def test_ingest_gpx_then_read_hourly(client, monkeypatch):
     status = client.get(f"/ingest/{resp.json()['batch_id']}").json()
     assert (status["status"], status["rows"]) == (BatchStatus.DONE.value, 1)
     (row,) = client.get("/exposure/hourly/p1").json()
-    assert (row["io"], row["delta_t_hours"], row["exposure_value"]) == (io_cfg.HOME_NAME, INDOOR_SECONDS / 3600, 2.5)
+    assert (row["io"], row["delta_t_hours"], row["exposure_value"]) == (io_cfg.HOME, INDOOR_SECONDS / 3600, 2.5)
 
 
 def test_gpx_batch_is_stored_as_trkpt_records(client, monkeypatch, test_settings):
@@ -197,7 +221,7 @@ def test_unknown_batch_is_404(client):
 # --- place labels ---
 
 LABEL = {
-    "contributor_id": "c-8f3a1b2c9d", "category": io_cfg.OFFICE_NAME, **HK,
+    "contributor_id": "c-8f3a1b2c9d", "category": io_cfg.OFFICE, **HK,
     "radius_m": 25, "updated_at": "2026-10-13T09:15:00+08:00",
 }
 
@@ -206,7 +230,7 @@ def test_put_label_creates_then_updates(client):
     resp = client.put("/place-labels/l1", json=LABEL)
     assert resp.status_code == 201
     assert resp.json() == {
-        "label_id": "l1", "contributor_id": "c-8f3a1b2c9d", "category": io_cfg.OFFICE_NAME, **HK,
+        "label_id": "l1", "contributor_id": "c-8f3a1b2c9d", "category": io_cfg.OFFICE, **HK,
         "radius_m": 25.0, "updated_at": "2026-10-13T01:15:00Z",
     }
 
@@ -262,8 +286,8 @@ def test_ingest_uses_place_labels(client, monkeypatch):
     client.post("/ingest", json={"pid": "p1", "features": [feature(start, **HK), feature(start + INDOOR_SECONDS, **HK)]})
 
     (row,) = client.get("/exposure/hourly/p1").json()
-    assert (row["io"], row["io_source"]) == (io_cfg.OFFICE_NAME, "label")
-    assert sent[0][4] == {"IO": io_cfg.OFFICE_API_LABEL}
+    assert (row["io"], row["io_source"]) == (io_cfg.OFFICE, "label")
+    assert sent[0][4] == {"IO": io_cfg.API_LABELS[io_cfg.OFFICE]}
 
 
 def test_ingest_again_replaces_the_old_rows(client, monkeypatch):
@@ -284,8 +308,8 @@ def test_ingest_again_replaces_the_old_rows(client, monkeypatch):
 # --- re-running stored batches when a label changes ---
 
 NIGHT = {"pid": "p1", "features": [feature(0, **HK), feature(INDOOR_SECONDS, **HK)]}  # 00:00 HK: Home
-HOME_INFERRED = (io_cfg.HOME_NAME, "inferred")
-OFFICE_LABEL = (io_cfg.OFFICE_NAME, "label")
+HOME_INFERRED = (io_cfg.HOME, "inferred")
+OFFICE_LABEL = (io_cfg.OFFICE, "label")
 
 
 def _ios(client, pid):

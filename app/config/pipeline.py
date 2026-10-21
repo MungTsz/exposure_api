@@ -1,73 +1,84 @@
 """
-Tunable thresholds for the ETL pipeline (app/etl). These shape the
-pipeline's output, so they are the values worth sweeping while checking
-results against data/samples/ in notebooks/pipeline_walkthrough.ipynb.
-Change values here, not the logic in app/etl.
+Tunable thresholds of the pipeline (app/pipeline), one section per step in
+step order. They shape the pipeline's output, so they are the values worth
+sweeping while checking results against data/samples/ in
+notebooks/pipeline_walkthrough.ipynb. Change values here, not the logic.
 
-Thresholds that decide which io type a stay gets (e.g. how long a stay
-must last to count as indoor) live in io_types.py instead.
+Thresholds of the decision tree itself (how long a stay must be to count as
+indoor, the Home hours, place label matching) live in io_types.py.
+
+Units:
+  deg  = |dlat| + |dlng| in degrees, the distance between two pings
+         (rule of thumb in Hong Kong: 1 m ~ 0.00001 deg; a diagonal move
+         reads up to ~1.4x longer than a north-south one)
+  m    = metres (distances to roads, route shape)
+  s    = seconds
 """
 
-# --- Spike removal (app/etl/spikes.py) ---
-SPIKE_ANGLE_DEG = 20.0           # angle at B below this = suspected spike
-SPIKE_TIME_WINDOW_SECONDS = 180  # only flag as a spike if A->C happened this fast
+# --- Step 0: spikes (app/pipeline/spikes.py) ---
+# Ping B of A, B, C is a spike when A->B and B->C are both at least
+# SPIKE_MIN_DEG (~100 m) and C is back within SPIKE_RETURN_RATIO of the
+# shorter leg from A: GPS jumped away and straight back.
+SPIKE_MIN_DEG = 0.001
+SPIKE_RETURN_RATIO = 0.25
 
-# --- Grouping pings into stays (app/etl/stays.py) ---
-# Degree-based "same location" tolerance for GPS drift, deliberately used
-# instead of a haversine distance so the check is a plain lat/lng delta
-# comparison. 0.0001 deg of lat/lng is ~11.1m, so ~0.00018 deg is ~20m - loose
-# enough to absorb typical indoor GPS drift (consumer GPS horizontal accuracy
-# is commonly 5-20m, worse indoors from multipath), tight enough not to merge
-# genuinely separate stops. Applied as a flat box on both lat and lng, with
-# no per-latitude correction for longitude compression.
-STAY_DEGREE_THRESHOLD = 0.00018
+# --- Step 1: motion of each interval (app/pipeline/motion.py) ---
+# Indoor GPS jitter moves a still phone by ~0.0001-0.0002 deg (10-20 m) per
+# ping whatever the time between pings, so a ping's own speed is useless.
+# v_net of a ping = (net displacement between the first and last ping within
+# V_NET_WINDOW_S around it, minus NOISE_DEG, at least 0) / their time span.
+NOISE_DEG = 0.0003          # ~30 m: GPS jitter floor
+V_NET_WINDOW_S = 120        # centred on the ping
+# An interval is, in this order:
+JUMP_DEG = 0.003            # jump  if it moved >= ~300 m (travelled while GPS was dark)
+GAP_S = 120                 # still if it is this long (no pings in between) ...
+STILL_MAX_V = 0.000005      # ... or its v_net is below ~0.5 m/s (deg/s)
+WALK_MAX_V = 0.00003        # walk  if its v_net is below ~3 m/s (deg/s); else vehicle
+# A phone that logs only every minute or so while moving (e.g. a watch on a
+# bus) also moves >= JUMP_DEG between pings: see MTR_MAX_JUMPS in step 3.
 
-# A ping only counts as part of the same stay if its own reported speed
-# (when the device provides one - many raw pings don't) is below this.
-# ~1.0 m/s (~3.6 km/h) is a brisk-walk cutoff: comfortably separates indoor
-# puttering (getting up, pacing a room) from real outdoor travel (walking
-# commute is usually 1.2 m/s+, any transit mode faster still), without
-# rejecting legitimate slow indoor movement. A missing speed reading doesn't
-# block a ping from joining the stay - only a reported *fast* speed does.
-SPEED_THRESHOLD_MPS = 1.0
+# --- Step 2: runs (app/pipeline/runs.py) ---
+# A still / walk run this short between two vehicle / jump runs is a stop
+# inside the trip (traffic light, bus stop).
+STOP_MAX_S = 180
+# Shorter runs are GPS blips and join a neighbour.
+MIN_VEHICLE_RUN_S = 120
+MIN_WALK_RUN_S = 60
+# Two still runs whose centres are this close, with a walk of at most
+# SAME_PLACE_MAX_WALK_S between them, are one stay (walking around a mall).
+SAME_PLACE_DEG = 0.0008     # ~80 m
+SAME_PLACE_MAX_WALK_S = 300
 
-# --- Route simplification (app/etl/routes.py) ---
-# While moving, the device logs ~1 ping/second and nearly every ping becomes
-# its own 1-second stay (it leaves the stay box immediately), which floods
-# expo_calx with rows and the app's map with points. simplify_routes thins
-# each continuous route before scoring: starting from the last kept point,
-# every following point is dropped while it is still inside a
-# ROUTE_POINT_DEGREE_THRESHOLD lat/lng box of that point AND less than
-# ROUTE_POINT_MAX_SECONDS have passed since it. The first point breaking
-# either condition is kept and becomes the new reference, so points land
-# roughly evenly along the route. Dropped points' time is folded into the
-# preceding kept point, so total time is preserved exactly.
-#
-# 0.0027 deg is ~300m of lat (~280m of lng at HK latitude) - a flat box like
-# STAY_DEGREE_THRESHOLD, not haversine. 300s means walking (~1.3 m/s covers
-# ~390m in 5 min) and anything faster is distance-triggered (~1 point per
-# 300m), while a pause or slow stroll still gets a point at least every
-# 5 min, which caps how much time one point's position stands in for.
-# On data/samples/20260830.geojson: 238 points, median spacing ~304m, 7
-# expo_calx calls (the earlier 0.0009/90s gave ~560 points, ~110m, 15 calls).
-# Raise both values for a sparser map, lower them for a denser one.
-ROUTE_POINT_DEGREE_THRESHOLD = 0.0027
-ROUTE_POINT_MAX_SECONDS = 300.0
+# --- Step 3: MTR (app/pipeline/mtr.py) ---
+# Sparse logging: an underground ride is one long GPS-dark jump, or a few if
+# the phone gets a fix at some stations (data/samples/1009, Kwun Tong line:
+# 4 jumps). A jump run with more jumps than this is a moving phone that just
+# logs rarely (watch data: 7-20 jumps per ride along the roads), so it is
+# treated as a vehicle run and the rail test below decides. When the two
+# can't be told apart, the default is Vehicle.
+MTR_MAX_JUMPS = 5
+# Rail test: a vehicle run inside Hong Kong whose pings are at a median of
+# at least this many metres from the nearest road centreline is
+# above-ground MTR. A car / bus drives on the centreline (road trips so
+# far: 2-6 m); a train runs beside the roads (East Rail line: 24 m).
+RAIL_MIN_ROAD_M = 15
+# Door-to-door MTR speed (~15 m/s, deg/s). A jump faster than this started
+# earlier (the pings before it were stale), so the still time right before
+# it joins the ride.
+MTR_MAX_AVG_V = 0.00015
+# A still / walk run this short between two MTR runs is changing lines
+# inside a station.
+INTERCHANGE_MAX_S = 10 * 60
 
-# A route breaks (never simplified across) when one stay lasts longer than
-# MAX_GAP_SECONDS - a stay's end is the next ping's time, so a long stay in
-# a moving route means a GPS dropout - or when two consecutive stays'
-# points are more than MAX_GAP_DEGREES apart (e.g. GPS drops in a tunnel and
-# resumes far away). Both endpoints of a real gap therefore survive as their
-# own points.
-#
-# The jump is measured as |dlat| + |dlng| in degrees (Manhattan distance, a
-# flat approximation like STAY_DEGREE_THRESHOLD, no trig). 0.0018 deg is
-# ~200m due north/south and ~185m due east/west at HK latitude; on a
-# diagonal L1 overestimates by up to sqrt(2), so the cutoff there is ~140m.
-# 0.0018 deg / 120s sit comfortably above the typical few-meters/few-seconds
-# gap between consecutive pings during normal continuous tracking in the
-# sample data (data/samples/*.geojson), while well below the
-# multi-hundred-meter/multi-minute jumps a genuine dropout produces.
-MAX_GAP_DEGREES = 0.0018
-MAX_GAP_SECONDS = 120.0
+# --- Step 5: output points (app/pipeline/points.py) ---
+# A route (walk / vehicle / MTR run) is thinned by Douglas-Peucker: the
+# thinned line stays within ROUTE_TOL_M of every ping, about a road's
+# width, so every turn, ramp and junction is kept. On the sample days,
+# "one point every 100 m" cut corners by up to 72 m; Douglas-Peucker kept
+# fewer points and never strays more than this.
+ROUTE_TOL_M = 15
+# ... plus at least one point every ~300 m on long straight roads, so the
+# client has direction arrows and each point stands for a short stretch.
+ROUTE_MAX_GAP_DEG = 0.003
+# A Vehicle point names its road when a centreline is this close.
+ROAD_NAME_MAX_M = 30

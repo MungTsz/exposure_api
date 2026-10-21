@@ -42,15 +42,21 @@ class Settings(BaseSettings):
     praise_max_concurrent_calls: int = 10
 
     # --- POST /ingest ---
-    # Request bodies larger than this are rejected with 413 and never
-    # stored or processed. data/samples/20260830.geojson (8,139 pings) is
-    # ~2 MB.
+    # Request bodies larger than this (5 MB) are rejected with 413 and never
+    # stored or processed. data/samples/20260830.geojson (8,139 pings, a
+    # whole day) is ~2 MB.
     max_ingest_body_bytes: int = 5 * 1024 * 1024
 
     # --- Storage ---
     # Point this at a mounted persistent volume in production, or data is
     # lost on every restart.
     exposure_db_path: str = "exposure.db"
+
+    # --- Road centrelines ---
+    # Lands Department road centrelines as GeoJSON (constants.ROAD_CENTRELINES_URL),
+    # loaded once at startup; the app refuses to start without them. A
+    # relative path is relative to the repo root.
+    road_centrelines_path: str = "data/road_centrelines/RoadCentreLine.geojson"
 
     # --- Logging ---
     log_level: str = "INFO"

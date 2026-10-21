@@ -1,21 +1,22 @@
 """
-Turns raw input records into Pings. Each input format has its own module
-here: geojson.py (GeoJSON Point Features) and gpx.py (GPX track points; an
-uploaded GPX file is first split into records by gpx.read_gpx). A batch may mix formats: every record is handed to the first parser
-whose can_parse() accepts it.
+Input: turns raw records into Pings (time, lng, lat - nothing else is read).
+Each input format has its own module here: geojson.py (GeoJSON Point
+Features) and gpx.py (GPX track points; an uploaded GPX file is first split
+into records by gpx.read_gpx). A batch may mix formats: every record is
+handed to the first parser whose can_parse() accepts it.
 
 To support a new input format (e.g. live device tracking):
   1. Add a module here with `can_parse(record) -> bool` and
-     `parse(record) -> Optional[Ping]` (return None to drop a record on
-     purpose). Reuse the helpers in common.py.
+     `parse(record) -> Optional[Ping]` (return None to drop a record with
+     no valid time or position). Reuse the helpers in common.py.
   2. Append it to PARSERS below.
 """
 
 import logging
 from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
-from app.etl.models import Ping
-from app.etl.parsers import geojson, gpx
+from app.pipeline.models import Ping
+from app.pipeline.parsers import geojson, gpx
 
 logger = logging.getLogger(__name__)
 
@@ -49,18 +50,22 @@ def parse_record(record: Dict[str, Any]) -> Optional[Ping]:
 
 def parse_pings(records: List[Dict[str, Any]]) -> List[Ping]:
     """Parse raw records into a time-sorted Ping list. Records no parser
-    recognizes are skipped and logged."""
+    recognizes, or with no valid time or position, are skipped and logged."""
     pings: List[Ping] = []
-    unrecognized = 0
+    unrecognized = invalid = 0
     for record in records:
         parser = find_parser(record)
         if parser is None:
             unrecognized += 1
             continue
         ping = parser.parse(record)
-        if ping is not None:
+        if ping is None:
+            invalid += 1
+        else:
             pings.append(ping)
     if unrecognized:
         logger.warning("skipped %d record(s) in an unrecognized input format", unrecognized)
+    if invalid:
+        logger.warning("skipped %d record(s) with no valid time or position", invalid)
     pings.sort(key=lambda p: p.utc)
     return pings

@@ -1,9 +1,11 @@
 # Exposure API
 
 HTTP API for the RN app: upload raw GPS pings, wait for the background job,
-then read per-hour exposure rows for the chart and the map. Users can also
-label places (Home, Office, School, Other Indoor); those labels decide the
-io type of stays at that place, for every user.
+then read per-hour exposure rows for the chart and the map. Every moment of
+the day gets an io type - `Home`, `Office`, `School`, `Other Indoor`,
+`Outdoor`, `MTR` or `Vehicle`. Users can also label places (Home, Office,
+School, Other Indoor); those labels decide the io type of stays at that
+place, for every user.
 
 Base URL when running locally: `http://localhost:8000`. The server also
 serves interactive docs generated from the code:
@@ -13,12 +15,13 @@ serves interactive docs generated from the code:
 ## Contents
 
 - [How it works](#how-it-works)
+- [How the io type is decided](#how-the-io-type-is-decided)
 - [Limits](#limits)
 - [Points outside Hong Kong](#points-outside-hong-kong)
 - [Try it yourself](#try-it-yourself)
   - [1. Two pings, same spot, 10 minutes apart: one row](#1-two-pings-same-spot-10-minutes-apart-one-row)
-  - [2. Two separate spots, same hour: two rows](#2-two-separate-spots-same-hour-two-rows)
-  - [3. Staying 25 minutes in one spot: Home](#3-staying-25-minutes-in-one-spot-home)
+  - [2. Moving 3 km while GPS was dark: MTR](#2-moving-3-km-while-gps-was-dark-mtr)
+  - [3. Staying 25 minutes in one spot at night: Home](#3-staying-25-minutes-in-one-spot-at-night-home)
   - [4. Same stay at noon: Other Indoor](#4-same-stay-at-noon-other-indoor)
   - [5. Outside Hong Kong: returned, but no exposure value](#5-outside-hong-kong-returned-but-no-exposure-value)
   - [6. Crossing the border: one row in HK, one outside](#6-crossing-the-border-one-row-in-hk-one-outside)
@@ -39,12 +42,16 @@ serves interactive docs generated from the code:
 ## How it works
 
 1. **Upload**: `POST /ingest` with a `pid` and the raw ping records (or
-   `POST /ingest/gpx?pid=...` with a whole GPX file). The server checks the body size and that it contains at least one valid
-   ping, stores it, and answers at once with `202` and a `batch_id`.
-2. **Wait**: a background job cleans the pings, groups them into stays,
-   cuts them at HK clock hours, and sends the rows **inside Hong Kong** to
-   the PRAISE-HK `expo_calx` API. Poll `GET /ingest/{batch_id}` until
-   `status` is `done` or `error`.
+   `POST /ingest/gpx?pid=...` with a whole GPX file). Only each ping's
+   **time and position** are read. The server checks the body size and
+   that it contains at least one valid ping, stores it, and answers at
+   once with `202` and a `batch_id`.
+2. **Wait**: a background job splits the day into runs (staying, walking,
+   in a vehicle, on the MTR), gives each run an io type, turns it into
+   points (one per stay, a thinned line per route), cuts their time at HK
+   clock hours, and sends the rows **inside Hong Kong** to the PRAISE-HK
+   `expo_calx` API. Poll `GET /ingest/{batch_id}` until `status` is `done`
+   or `error`.
 3. **Read**: `GET /exposure/hourly/{pid}` returns every row, inside and
    outside Hong Kong. Each row has `in_hk`; rows outside HK have
    `exposure_value: null`.
@@ -57,34 +64,76 @@ RN app                       this server                          expo_calx
   |                              in HK rows -----------------------> scored (<=10 calls at once)
   |                              outside HK rows: stored, not sent
   | GET /ingest/{batch_id} --> status: pending/processing/done/error
-  | GET /exposure/hourly/{pid} -> rows with in_hk + exposure_value
+  | GET /exposure/hourly/{pid} -> rows with io, in_hk, exposure_value
 ```
+
+## How the io type is decided
+
+The day is cut into **runs**: stretches of the same kind of movement
+(still, walk, vehicle, or a jump - moving 300 m or more between two pings,
+i.e. travelling while GPS was dark). Each run then gets an io type:
+
+| run | io | `reason` |
+|---|---|---|
+| a jump (underground: GPS dark between two stations; at most 5 jumps in a row - more is a phone logging rarely on the road, treated as a vehicle run below) | `MTR` | `jump` |
+| a vehicle run whose pings keep 15 m or more from every road centreline (a train runs beside the roads, a car on them) | `MTR` | `rail` |
+| a stop of up to 10 minutes between two MTR runs | `MTR` | `interchange` |
+| any other vehicle run (taxi, bus, minibus, shuttle bus, car, motorcycle) | `Vehicle` | `vehicle` |
+| walking | `Outdoor` | `walk` |
+| a stay inside a [place label](#place-labels) | the label's category | `place_label` |
+| a stay of 20+ minutes overlapping 00:00-06:00 HK | `Home` | `night_stay` |
+| a stay within ~100 m of such a night stay (same upload) | `Home` | `near_night_stay` |
+| a stay shorter than 20 minutes | `Outdoor` | `short_stop` |
+| any other stay | `Other Indoor` | `long_stay` |
+
+Rules are checked top to bottom within the stays; place labels come first,
+even at night. `Office` and `School` are never guessed: without a label
+they are `Other Indoor`.
+
+Then each run becomes **points**, which is what the rows are made of:
+
+- a stay (or an MTR interchange) is **one point**, at the median of its
+  pings - indoor GPS drift doesn't move it;
+- a route (walk, vehicle, MTR) keeps a **thinned line** of its pings: every
+  turn is kept (the line never strays more than 15 m from the GPS path),
+  with at least one point every ~300 m, and both ends of every GPS gap
+  (e.g. the two stations of an underground ride). Each route point has
+  the direction to the next point (`heading_deg`, `compass`), and a
+  Vehicle point the road it is on (`road_name`).
+
+Each point owns the time until the next point; that time is cut at HK
+clock hours (expo_calx scores each row against that hour's AQHI), giving
+one row per point per hour.
 
 ## Limits
 
 | limit | value | what happens past it |
 |---|---|---|
-| request body size | **25 MB** (26,214,400 bytes) | `413`, the upload is not stored or processed |
+| request body size | **5 MB** (5,242,880 bytes) | `413`, the upload is not stored or processed |
 | rows per `expo_calx` call | 40 | rows are split into several calls |
 | `expo_calx` calls running at once | **10**, shared by all batches on one server process | further calls wait until one finishes |
 | region scored | Hong Kong only | rows outside get `in_hk: false`, `exposure_value: null` |
 
-What 25 MB fits: a full day at 1 ping per second (~86,400 GeoJSON
-Features) is about 21 MB; `data/samples/20260830.geojson` (8,139 pings) is
-about 2 MB. Upload one day per request.
+What 5 MB fits: about 21,000 GeoJSON Features (~250 bytes each) or about
+40,000 GPX track points (~130 bytes each). A phone logs far fewer pings
+while it stays put, so a whole day usually fits:
+`data/samples/20260830.geojson` (8,139 pings, 24 hours) is about 2 MB. A
+day logged at 1 ping per second all the time (~86,400 Features, about
+21 MB) does not: split it into several uploads of a few hours each.
 
 How long a batch takes: each `expo_calx` call takes about 20-30 s no matter
 its size. A batch's calls run in parallel, up to 10 at a time, so a batch of
 up to 10 calls (400 rows) finishes in about one call's time. The densest
-sample day, 20260830, becomes 270 rows = 7 calls, all sent at once. If
-several batches are processed at the same time, they share the same 10
-slots. The cap is per server process: running `uvicorn` with N workers
-allows up to 10 x N calls at once.
+sample day, 20260830 (8,139 pings), becomes 520 points and 544 rows = 14
+calls: 10 at once, then the other 4. If several batches are processed at
+the same time, they share the same 10 slots. The cap is per server
+process: running `uvicorn` with N workers allows up to 10 x N calls at
+once.
 
 ## Points outside Hong Kong
 
-`expo_calx` only calculates exposure for Hong Kong. Each hourly row is
-checked against a Hong Kong outline (land and waters) by its `lng`/`lat`:
+`expo_calx` only calculates exposure for Hong Kong. Each row is checked
+against a Hong Kong outline (land and waters) by its `lng`/`lat`:
 
 - **inside** (`in_hk: true`): sent to `expo_calx`; `exposure_value` is a
   number (or `null` if `expo_calx` failed for that single row).
@@ -94,7 +143,8 @@ checked against a Hong Kong outline (land and waters) by its `lng`/`lat`:
   it out of exposure totals.
 
 A batch with no points in Hong Kong makes no `expo_calx` call at all and
-still finishes as `done`.
+still finishes as `done`. The road data only covers Hong Kong, so outside
+HK a vehicle run is always `Vehicle` (never `MTR` by the rail test).
 
 The outline is simplified: near the Shenzhen border (Deep Bay, Shenzhen
 River, Sha Tau Kok) it is accurate to roughly 1 km, so a point right on the
@@ -114,8 +164,9 @@ Each scenario uses its own `pid` and fixed, made-up timestamps and
 coordinates, so the result is exactly reproducible - **except**
 `exposure_value` for rows inside Hong Kong, which comes from the live
 `expo_calx` API (it depends on the real air quality at that time and
-place). Everything else - number of rows, `io`, `delta_t_hours`,
-`lng`/`lat`, `in_hk` - should match exactly.
+place). Everything else - number of rows, `io`, `reason`,
+`delta_t_hours`, `lng`/`lat`, `in_hk` - should match exactly. Run them
+before example 8: its place label changes examples 1, 3 and 4.
 
 After each upload, use the `batch_id` from its response to poll the batch,
 then read the rows:
@@ -128,82 +179,85 @@ curl http://localhost:8000/exposure/hourly/<pid>
 #### 1. Two pings, same spot, 10 minutes apart: one row
 
 ```bat
-curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-merge\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:00:00.000Z\",\"speed\":0.05},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:10:00.000Z\",\"speed\":0.3},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}}]}"
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-merge\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:10:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}}]}"
 ```
 
-Why one row: both pings are at the same coordinates, and the second one's
-`speed` (0.3 m/s) is under the 1.0 m/s threshold, so they form one stay.
-10 minutes is under the 20-minute indoor cutoff, so it's `"Outdoor"`, and
-both times fall in the same HK-local hour, so nothing is split. The point
-is in Clear Water Bay, Hong Kong. Batch: `"status": "done",
-"hours_processed": 1, "rows": 1`. `/exposure/hourly/demo-merge`:
+Why one row: the phone didn't move, so the two pings are one stay - one
+point. 10 minutes is under the 20-minute indoor cutoff, so it's
+`"Outdoor"` (`reason: "short_stop"`), and both times fall in the same
+HK-local hour, so nothing is split. The point is in Clear Water Bay, Hong
+Kong. Batch: `"status": "done", "hours_processed": 1, "rows": 1`.
+`/exposure/hourly/demo-merge`:
 
 ```json
-[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "io_source": "inferred", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
+[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "io_source": "inferred", "reason": "short_stop", "kind": "stay", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "heading_deg": null, "compass": null, "road_name": null, "in_hk": true}]
 ```
 
-#### 2. Two separate spots, same hour: two rows
+#### 2. Moving 3 km while GPS was dark: MTR
+
+Two pings at one station, no ping for 6 minutes, then two pings 3 km away:
 
 ```bat
-curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-split\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:00:00.000Z\",\"speed\":0.1},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:05:00.000Z\",\"speed\":0.2},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:10:00.000Z\",\"speed\":0.3},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.265,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:15:00.000Z\",\"speed\":0.1},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.265,22.3399579]}}]}"
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-mtr\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T01:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26,22.3074]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T01:01:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26,22.3074]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T01:07:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2366,22.292]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T01:08:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2366,22.292]}}]}"
 ```
 
-Why two rows: the first 2 pings are at one spot (`lng 114.2632457`), the
-last 2 at another about 180m east (`lng 114.265`) - well outside the ~20m
-stay box, so ping 3 starts a new stay. A stay lasts until the next stay
-starts, so the first covers 16:00-16:10 (10 min) and the second 16:10-16:15
-(5 min, ending at the last ping). Both are under 20 minutes, so both are
-`"Outdoor"`, and both land in the same hour - two rows sharing one
-`hour_start_hk`, told apart by `start_time_hk`. `/exposure/hourly/demo-split`:
+Why: moving 300 m or more between two pings means travelling while GPS was
+dark - an underground ride, so the 6 minutes between the stations are
+`"MTR"` (`reason: "jump"`). That ride is a route: its point is at the
+first station, with the direction of travel (`compass: "SW"`). The minute
+at each station is a short stop (`"Outdoor"`). Batch: `"rows": 3`.
+`/exposure/hourly/demo-mtr`:
 
 ```json
 [
-  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "io_source": "inferred", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true},
-  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830001000", "io": "Outdoor", "io_source": "inferred", "delta_t_hours": 0.08333333333333333, "exposure_value": <live value>, "lng": 114.265, "lat": 22.3399579, "in_hk": true}
+  {"hour_start_hk": "20260830090000", "start_time_hk": "20260830090000", "io": "Outdoor", "io_source": "inferred", "reason": "short_stop", "kind": "stay", "delta_t_hours": 0.016666666666666666, "exposure_value": <live value>, "lng": 114.26, "lat": 22.3074, "heading_deg": null, "compass": null, "road_name": null, "in_hk": true},
+  {"hour_start_hk": "20260830090000", "start_time_hk": "20260830090100", "io": "MTR", "io_source": "inferred", "reason": "jump", "kind": "route", "delta_t_hours": 0.1, "exposure_value": <live value>, "lng": 114.26, "lat": 22.3074, "heading_deg": 234.57358418287038, "compass": "SW", "road_name": null, "in_hk": true},
+  {"hour_start_hk": "20260830090000", "start_time_hk": "20260830090700", "io": "Outdoor", "io_source": "inferred", "reason": "short_stop", "kind": "stay", "delta_t_hours": 0.016666666666666666, "exposure_value": <live value>, "lng": 114.2366, "lat": 22.292, "heading_deg": null, "compass": null, "road_name": null, "in_hk": true}
 ]
 ```
 
-#### 3. Staying 25 minutes in one spot: Home
+The request to `expo_calx` used `{"IO": "MTR"}` for the middle row.
+
+#### 3. Staying 25 minutes in one spot at night: Home
 
 ```bat
-curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-indoor\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:10:00.000Z\",\"speed\":0.1},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2633,22.339965]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:25:00.000Z\",\"speed\":0.05},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26322,22.33995]}}]}"
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-indoor\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:10:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2633,22.339965]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:25:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26322,22.33995]}}]}"
 ```
 
-Why Home, and why that exact `lng`/`lat`: the 3 pings drift a few meters
-but stay inside the ~20m box of the first ping and are slow, so they form
-one stay from 16:00 to 16:25 UTC - 25 minutes, past the 20-minute indoor
-cutoff, so it's indoor. It starts at 00:00 HK time (16:00 UTC is 00:00
-the next day in HK), inside the 00:00-06:00 Home window, so it's `"Home"`.
-Home is a `stationary` io type, so the row uses the first ping's exact
-coordinates instead of the average. `/exposure/hourly/demo-indoor`:
+Why Home, and why that exact `lng`/`lat`: the 3 pings drift a few metres -
+GPS jitter, not movement - so they form one stay from 16:00 to 16:25 UTC,
+25 minutes, past the 20-minute indoor cutoff. It is at 00:00 HK time
+(16:00 UTC is 00:00 the next day in HK), inside the 00:00-06:00 night
+window, so it's `"Home"` (`reason: "night_stay"`). A stay's point is the
+median of its pings: here the middle ping on both axes, which is the first
+one. `/exposure/hourly/demo-indoor`:
 
 ```json
-[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Home", "io_source": "inferred", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
+[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Home", "io_source": "inferred", "reason": "night_stay", "kind": "stay", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "heading_deg": null, "compass": null, "road_name": null, "in_hk": true}]
 ```
 
-The request to `expo_calx` used `{"IO": "Home"}` - Home's `api_label`.
+The request to `expo_calx` used `{"IO": "Home"}`.
 
 #### 4. Same stay at noon: Other Indoor
 
 The same 3 pings as example 3, 12 hours later (04:00 UTC = 12:00 HK):
 
 ```bat
-curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-other-indoor\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:10:00.000Z\",\"speed\":0.1},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2633,22.339965]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:25:00.000Z\",\"speed\":0.05},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26322,22.33995]}}]}"
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-other-indoor\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:10:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2633,22.339965]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:25:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26322,22.33995]}}]}"
 ```
 
-Still one 25-minute indoor stay, but it starts at 12:00 HK, outside the
-00:00-06:00 Home window, so it's `"Other Indoor"`. Other Indoor is also
-`stationary`, so the position is the first ping again.
+Still one 25-minute stay, but 12:00-12:25 HK doesn't touch the 00:00-06:00
+night window, so it's `"Other Indoor"` (`reason: "long_stay"`).
 `/exposure/hourly/demo-other-indoor`:
 
 ```json
-[{"hour_start_hk": "20260830120000", "start_time_hk": "20260830120000", "io": "Other Indoor", "io_source": "inferred", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
+[{"hour_start_hk": "20260830120000", "start_time_hk": "20260830120000", "io": "Other Indoor", "io_source": "inferred", "reason": "long_stay", "kind": "stay", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "heading_deg": null, "compass": null, "road_name": null, "in_hk": true}]
 ```
 
 The request to `expo_calx` used `{"IO": "Other Indoor"}`.
 
-Only the stay's **start** time decides Home vs Other Indoor: an indoor stay
-from 05:50 to 08:00 HK is Home as a whole, even after the hour split.
+A stay is Home if **any** part of it falls in 00:00-06:00 HK: a stay from
+22:00 to 08:00 is Home as a whole, even after the hour split.
 
 #### 5. Outside Hong Kong: returned, but no exposure value
 
@@ -218,7 +272,7 @@ result is fully reproducible - there is no live value. Batch: `"status":
 "done", "hours_processed": 1, "rows": 1`. `/exposure/hourly/demo-macau`:
 
 ```json
-[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "io_source": "inferred", "delta_t_hours": 0.16666666666666666, "exposure_value": null, "lng": 113.5439, "lat": 22.1987, "in_hk": false}]
+[{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "io_source": "inferred", "reason": "short_stop", "kind": "stay", "delta_t_hours": 0.16666666666666666, "exposure_value": null, "lng": 113.5439, "lat": 22.1987, "heading_deg": null, "compass": null, "road_name": null, "in_hk": false}]
 ```
 
 #### 6. Crossing the border: one row in HK, one outside
@@ -228,22 +282,23 @@ curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d
 ```
 
 Why: the first ping is in Sheung Shui (Hong Kong), the next two are in
-Luohu (Shenzhen), about 5 km apart, so they form two stays of 10 minutes
-each. Only the Sheung Shui row is sent to `expo_calx`; the Luohu row comes
-back with `in_hk: false` and no value. Batch: `"status": "done",
-"hours_processed": 1, "rows": 2` (`rows` counts both).
-`/exposure/hourly/demo-border`:
+Luohu (Shenzhen), about 5 km away with no ping in between - a jump, so the
+first 10 minutes are `"MTR"` (heading north). The 10 minutes in Luohu are
+a short stop outside Hong Kong. Only the Sheung Shui row is sent to
+`expo_calx`; the Luohu row comes back with `in_hk: false` and no value.
+Batch: `"status": "done", "hours_processed": 1, "rows": 2` (`rows`
+counts both). `/exposure/hourly/demo-border`:
 
 ```json
 [
-  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "io_source": "inferred", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.128, "lat": 22.501, "in_hk": true},
-  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830001000", "io": "Outdoor", "io_source": "inferred", "delta_t_hours": 0.16666666666666666, "exposure_value": null, "lng": 114.117, "lat": 22.545, "in_hk": false}
+  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "MTR", "io_source": "inferred", "reason": "jump", "kind": "route", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.128, "lat": 22.501, "heading_deg": 346.9945592676879, "compass": "N", "road_name": null, "in_hk": true},
+  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830001000", "io": "Outdoor", "io_source": "inferred", "reason": "short_stop", "kind": "stay", "delta_t_hours": 0.16666666666666666, "exposure_value": null, "lng": 114.117, "lat": 22.545, "heading_deg": null, "compass": null, "road_name": null, "in_hk": false}
 ]
 ```
 
 #### 7. Body too large: 413, nothing stored
 
-Making a real 25 MB body by hand is impractical, so lower the limit for
+Making a real 5 MB body by hand is impractical, so lower the limit for
 this test. Stop the server, then restart it in `cmd.exe` with a 200-byte
 limit:
 
@@ -261,8 +316,7 @@ HTTP 413
 ```
 
 No batch is created. Afterwards, close that window or run
-`set MAX_INGEST_BODY_BYTES=` before restarting, to go back to the 25 MB
-default.
+`set MAX_INGEST_BODY_BYTES=` before restarting, to go back to the default.
 
 #### 8. A place label: the noon stay becomes Office
 
@@ -285,24 +339,25 @@ changes nothing. Now upload the pings from example 4 again, under a new
 `pid`:
 
 ```bat
-curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-label\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:10:00.000Z\",\"speed\":0.1},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2633,22.339965]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:25:00.000Z\",\"speed\":0.05},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26322,22.33995]}}]}"
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-label\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:10:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2633,22.339965]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T04:25:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26322,22.33995]}}]}"
 ```
 
-Why Office: it is still one 25-minute indoor stay at 12:00 HK, which the
-rules would call `"Other Indoor"`. But all 3 pings are within 25 m of the
-label's centre (about 0, 6 and 3 m away), so the label matches and its
-category wins. `io_source` says the label decided it.
+Why Office: it is still one 25-minute stay at 12:00 HK, which the rules
+would call `"Other Indoor"`. But all 3 pings are within 25 m of the label's
+centre (about 0, 6 and 3 m away), so the label matches and its category
+wins. `io_source` and `reason` say the label decided it.
 `/exposure/hourly/demo-label`:
 
 ```json
-[{"hour_start_hk": "20260830120000", "start_time_hk": "20260830120000", "io": "Office", "io_source": "label", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "in_hk": true}]
+[{"hour_start_hk": "20260830120000", "start_time_hk": "20260830120000", "io": "Office", "io_source": "label", "reason": "place_label", "kind": "stay", "delta_t_hours": 0.4166666666666667, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "heading_deg": null, "compass": null, "road_name": null, "in_hk": true}]
 ```
 
 The request to `expo_calx` used `{"IO": "Office"}`.
 
-Labels are shared, so while this one exists, examples 3 and 4 at the same
-spot also come out as `"Office"` (a label overrides the 00:00-06:00 Home
-window too). Delete it to get the results above back:
+Labels are shared, so while this one exists, examples 1, 3 and 4 at the
+same spot also come out as `"Office"` - storing the label re-ran them (a
+label overrides the night window too, and applies to a stay of any
+length). Delete it to get the results above back:
 
 ```bat
 curl -X DELETE "http://localhost:8000/place-labels/demo-office?contributor_id=c-demo"
@@ -324,16 +379,13 @@ they no longer overlap.
 
 How a stay's io type is chosen:
 
-1. Labels work on **visits**: the consecutive stays a label matches, plus
-   neighbouring stays drifted up to 30 m past the circle's edge (indoor GPS
-   drift can split a night at one place into many short stays). A visit
-   counts as one stay with the label's category, whatever the rules say:
-   an Office circle at 02:00 is `"Office"`, never `"Home"`. A visit needs
-   at least 20 minutes in total, so walking past an office door stays
-   `"Outdoor"`.
-2. A label matches the stay when its circle holds **at least half of the
-   stay's pings**. All pings are counted, not just the first, because
-   indoor GPS often drifts 20-50 m.
+1. A **stay** is a run of the day where the phone didn't move (GPS jitter
+   aside); walking around inside one building for a few minutes doesn't
+   split it. Only stays are checked against labels - walking past an
+   office or driving past a home never is.
+2. Indoor GPS drifts 20-50 m, so every circle is grown by **30 m**, and a
+   label matches the stay when the grown circle holds **at least half of
+   the stay's pings**. All pings are counted, not just the first.
 3. If several labels match, the one holding the most of the stay's pings
    wins; on a tie, the smaller radius wins (it is the more specific place).
 4. Labels for the same spot (circles overlapping by at least half of their
@@ -341,13 +393,13 @@ How a stay's io type is chosen:
    contributors wins. A small circle inside a much bigger one is not the
    same spot, so it is not outvoted by it. The result never depends on the
    order labels were added.
-5. No match: the rules' result stands (as in examples 1-4: 20+ minutes in
-   one spot starting 00:00-06:00 HK = Home, else Other Indoor; shorter =
-   Outdoor). A match overrides it: a stay starting at 14:00 inside a Home
-   circle is Home.
+5. A match wins over every rule, for a stay of any length: an Office circle
+   at 02:00 is `"Office"`, never `"Home"`; a Home circle at 14:00 is
+   `"Home"`. No match: the rules decide (see
+   [How the io type is decided](#how-the-io-type-is-decided)).
 
 Each row in `GET /exposure/hourly/{pid}` says which way it went in
-`io_source`: `"label"` or `"inferred"`.
+`io_source` (`"label"` or `"inferred"`) and `reason` (`"place_label"`, ...).
 
 Stored rows follow the labels. When a label is created, moved or deleted,
 the server re-runs in the background every stored batch (of every `pid`)
@@ -374,7 +426,7 @@ never returned to anyone else.
 `POST /ingest` - store a batch of raw pings and queue it for background
 processing.
 
-Request body (`Content-Type: application/json`, at most 25 MB):
+Request body (`Content-Type: application/json`, at most 5 MB):
 
 | field | type | required | notes |
 |---|---|---|---|
@@ -385,12 +437,12 @@ GeoJSON `Feature` record:
 
 | field | required | used? |
 |---|---|---|
-| `properties.time` (ISO 8601, UTC) | yes | yes - ping time |
+| `properties.time` (ISO 8601; `Z` or no zone = UTC) | yes | yes - ping time |
 | `geometry.coordinates` (`[lng, lat]`) | yes | yes - position |
-| `properties.speed` (m/s) | no | yes, if present - stay speed check. A negative value means "unknown" |
-| `.provider`, `.time_long`, `.accuracy`, `.altitude`, `.bearing` | no | no - accepted, ignored |
+| any other property (`speed`, `provider`, `accuracy`, `altitude`, `bearing`, ...) | no | no - accepted, ignored |
 
-Records in any other shape are skipped (and logged).
+A record without a valid time and position, or in any other shape, is
+skipped (and logged).
 
 Responses:
 
@@ -398,7 +450,7 @@ Responses:
 |---|---|---|
 | `202` | `{"status": "queued", "batch_id": 12}` | stored; processing has started in the background |
 | `400` | `{"detail": "no valid pings in request"}` | `features` contains no valid ping |
-| `413` | `{"detail": "request body too large: limit is 26214400 bytes"}` | body over the size limit; nothing stored |
+| `413` | `{"detail": "request body too large: limit is 5242880 bytes"}` | body over the size limit; nothing stored |
 | `422` | `{"detail": [{"type": "missing", "loc": ["body", "pid"], "msg": "Field required", ...}]}` | `pid` or `features` missing or the wrong type |
 
 Uploading a whole GeoJSON export (e.g. a file in `data/samples/`) works the
@@ -421,7 +473,7 @@ Request:
 | part | required | notes |
 |---|---|---|
 | query `pid` | yes | person/device id; every result row is stored under it |
-| body | yes | the GPX file as-is, at most 25 MB. Send `Content-Type: application/gpx+xml` (the server does not check it) |
+| body | yes | the GPX file as-is, at most 5 MB. Send `Content-Type: application/gpx+xml` (the server does not check it) |
 
 What is read from each `<trkpt>`:
 
@@ -429,8 +481,7 @@ What is read from each `<trkpt>`:
 |---|---|---|
 | `lat`, `lon` attributes | yes | yes - position. A point with a missing or out-of-range value is dropped |
 | `<time>` (ISO 8601; no zone = UTC) | yes | yes - ping time. A point without it is dropped |
-| `<speed>` (m/s, GPX 1.0 only) | no | yes, if present - stay speed check. Without it, stays are judged by distance alone, as for GeoJSON without `speed` |
-| `<ele>`, `<extensions>`, other children | no | no - accepted, ignored |
+| `<ele>`, `<speed>`, `<extensions>`, other children | no | no - accepted, ignored |
 
 Waypoints (`<wpt>`) and planned routes (`<rte>`) have no recorded time
 sequence and are ignored.
@@ -442,7 +493,7 @@ Responses:
 | `202` | `{"status": "queued", "batch_id": 13}` | stored; processing has started in the background |
 | `400` | `{"detail": "invalid GPX: not a readable XML document (syntax error: line 1, column 0)"}` | body is not well-formed XML, or its root element is not `<gpx>` |
 | `400` | `{"detail": "no valid pings in request"}` | the file has no `<trkpt>` with a valid time and position |
-| `413` | `{"detail": "request body too large: limit is 26214400 bytes"}` | body over the size limit; nothing stored |
+| `413` | `{"detail": "request body too large: limit is 5242880 bytes"}` | body over the size limit; nothing stored |
 | `422` | `{"detail": [{"type": "missing", "loc": ["query", "pid"], "msg": "Field required", ...}]}` | `pid` missing |
 
 Upload a sample file (works in `cmd.exe` and git-bash):
@@ -453,7 +504,7 @@ curl -X POST "http://localhost:8000/ingest/gpx?pid=local-device" -H "Content-Typ
 
 Use `--data-binary`, not `-d`: `-d` strips the file's line breaks.
 `data/samples/1009_route_history.gpx` (1,314 track points, about 9 hours)
-becomes 70 rows = 2 `expo_calx` calls.
+becomes 156 points and 165 rows = 5 `expo_calx` calls.
 
 ### Poll a batch
 
@@ -487,24 +538,34 @@ its rows are stored; upload it again to retry.
 `GET /exposure/hourly/{pid}` - every stored row for one `pid`, ordered by
 `start_time_hk`. An unknown `pid` returns `[]`.
 
-Each row is the part of one stay that falls in one HK-local clock hour.
-More than one row can share an `hour_start_hk` + `io` (scenario 2).
+Each row is the part of one point's time that falls in one HK-local clock
+hour (see [How the io type is decided](#how-the-io-type-is-decided)): a
+stay is one point, a route (walk, vehicle, MTR) several, so many rows can
+share an `hour_start_hk` + `io`.
 
 - **Stacked bar chart**: group by `hour_start_hk` + `io` and sum
   `delta_t_hours` / `exposure_value`. Rows with `in_hk: false` have no
   value - leave them out of the exposure totals or show them separately.
-- **Map**: plot each row's `lng`/`lat` in `start_time_hk` order, and
-  color rows with `in_hk: false` differently.
+- **Map**: draw the rows' `lng`/`lat` in `start_time_hk` order - stays as
+  places, consecutive route rows as a line (a point split by an hour
+  boundary repeats its position, which draws nothing extra). Use
+  `heading_deg` / `compass` for direction arrows and `road_name` to label
+  roads. Color rows with `in_hk: false` differently.
 
 | field | type | notes |
 |---|---|---|
 | `hour_start_hk` | string `YYYYMMDDHH0000`, HK local | hour bucket - group by this (+ `io`) for the chart |
-| `start_time_hk` | string `YYYYMMDDHHMMSS`, HK local | this row's own start time; unique per `pid` + `io` - sort by this for the route |
-| `io` | string | io type: `"Home"` \| `"Office"` \| `"School"` \| `"Other Indoor"` \| `"Outdoor"` |
+| `start_time_hk` | string `YYYYMMDDHHMMSS`, HK local | this row's own start time; unique per `pid` + `io` - sort by this for the map |
+| `io` | string | `"Home"` \| `"Office"` \| `"School"` \| `"Other Indoor"` \| `"Outdoor"` \| `"MTR"` \| `"Vehicle"` |
 | `io_source` | string | `"label"` if a [place label](#place-labels) decided `io`, `"inferred"` if the rules did |
+| `reason` | string or `null` | which rule decided `io`: `"jump"`, `"rail"`, `"interchange"`, `"vehicle"`, `"walk"`, `"place_label"`, `"night_stay"`, `"near_night_stay"`, `"short_stop"`, `"long_stay"` (see [the table](#how-the-io-type-is-decided)); `null` on rows stored before this field existed |
+| `kind` | string or `null` | `"stay"` (one point for a whole stay or MTR interchange) or `"route"` (one point of a walk / vehicle / MTR route); `null` on older rows |
 | `delta_t_hours` | number | duration of this row, in hours |
 | `exposure_value` | number or `null` | `null` if `in_hk` is `false`, or if `expo_calx` returned `-9` (failed) for this row |
-| `lng` / `lat` | number | `moving` io types (Outdoor): average of the stay's pings. `stationary` (Home, Office, School, Other Indoor): the stay's first ping |
+| `lng` / `lat` | number | stays: the median of the stay's pings. Route points: the kept ping's position |
+| `heading_deg` | number or `null` | route points: direction to the next point, degrees, 0 = north, clockwise; `null` for stays (and if the next point is at the same place) |
+| `compass` | string or `null` | `heading_deg` as `"N"`, `"NE"`, `"E"`, `"SE"`, `"S"`, `"SW"`, `"W"`, `"NW"` |
+| `road_name` | string or `null` | `Vehicle` route points: the English name of the road within 30 m, e.g. `"LUNG CHEUNG ROAD"`; `null` otherwise or for unnamed roads |
 | `in_hk` | boolean | `true` inside Hong Kong (scored); `false` outside (not scored) |
 
 The full `expo_calx` result item for each scored row is also kept in the
@@ -579,7 +640,7 @@ Every error body is JSON with a `detail` field.
 |---|---|---|---|
 | `400` | `POST /ingest` | no valid pings in `features` | check the record format |
 | `400` | `POST /ingest/gpx` | not a readable GPX file, or no track point with a valid time and position | check the file |
-| `413` | `POST /ingest`, `POST /ingest/gpx` | body over 25 MB; nothing stored | split the upload (e.g. per day or half day) |
+| `413` | `POST /ingest`, `POST /ingest/gpx` | body over 5 MB; nothing stored | split the upload (e.g. a few hours each) |
 | `422` | `POST /ingest` | `pid`/`features` missing or wrong type | fix the request body |
 | `422` | `POST /ingest/gpx` | `pid` query parameter missing | add `?pid=...` |
 | `404` | `GET /ingest/{batch_id}` | unknown `batch_id` | |
@@ -598,7 +659,8 @@ Set as environment variables or in `.env` (see
 
 | variable | default | meaning |
 |---|---|---|
-| `MAX_INGEST_BODY_BYTES` | `26214400` (25 MB) | largest accepted `POST /ingest` body |
+| `MAX_INGEST_BODY_BYTES` | `5242880` (5 MB) | largest accepted `POST /ingest` / `POST /ingest/gpx` body |
 | `PRAISE_MAX_CONCURRENT_CALLS` | `10` | `expo_calx` calls running at once, per server process |
 | `PRAISE_MAX_ROWS_PER_CALL` | `40` | rows per `expo_calx` call |
 | `PRAISE_REQUEST_TIMEOUT_SECONDS` | `60` | timeout for one `expo_calx` call |
+| `ROAD_CENTRELINES_PATH` | `data/road_centrelines/RoadCentreLine.geojson` | road centrelines loaded at startup (the server refuses to start without them; see the README) |

@@ -15,13 +15,18 @@ SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS hourly_exposure (
     pid TEXT NOT NULL,
     hour_start_hk TEXT NOT NULL,   -- 'YYYYMMDDHH0000', HK local - hour bucket, for chart grouping
-    start_time_hk TEXT NOT NULL,   -- 'YYYYMMDDHHMMSS', HK local - this stay's own precise start time
-    io TEXT NOT NULL,              -- io type name, see app/io_types
+    start_time_hk TEXT NOT NULL,   -- 'YYYYMMDDHHMMSS', HK local - this slice's own start time
+    io TEXT NOT NULL,              -- io type name, see config/io_types.py
     io_source TEXT NOT NULL DEFAULT '{IoSource.INFERRED.value}',  -- see constants.IoSource
+    reason TEXT,                   -- decision tree branch, see constants.Reason (NULL on rows stored before it)
+    kind TEXT,                     -- 'stay' or 'route', see constants.PointKind (NULL on rows stored before it)
     delta_t_hours REAL NOT NULL,
     exposure_value REAL,           -- NULL if expo_calx reported this row as failed
     lng REAL,
     lat REAL,
+    heading_deg REAL,              -- route points: towards the next point, 0 = north, clockwise
+    compass TEXT,                  -- heading_deg as N / NE / E / ...
+    road_name TEXT,                -- Vehicle points: the road it is on
     in_hk INTEGER NOT NULL DEFAULT 1,  -- 1 inside Hong Kong; 0 outside (not sent to expo_calx, exposure_value NULL)
     api_result_json TEXT,          -- the expo_calx result item as returned, kept for fields not yet in their own column
     PRIMARY KEY (pid, io, start_time_hk)
@@ -67,6 +72,11 @@ ADDED_COLUMNS: List[Tuple[str, str, str]] = [
     ("hourly_exposure", "api_result_json", "TEXT"),
     ("hourly_exposure", "in_hk", "INTEGER NOT NULL DEFAULT 1"),
     ("hourly_exposure", "io_source", f"TEXT NOT NULL DEFAULT '{IoSource.INFERRED.value}'"),
+    ("hourly_exposure", "reason", "TEXT"),
+    ("hourly_exposure", "kind", "TEXT"),
+    ("hourly_exposure", "heading_deg", "REAL"),
+    ("hourly_exposure", "compass", "TEXT"),
+    ("hourly_exposure", "road_name", "TEXT"),
     ("ingest_batches", "min_lng", "REAL"),
     ("ingest_batches", "min_lat", "REAL"),
     ("ingest_batches", "max_lng", "REAL"),

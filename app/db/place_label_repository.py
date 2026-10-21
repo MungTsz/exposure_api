@@ -1,6 +1,6 @@
 """
 Place labels: shared circles users put on a map (see
-app/io_types/place_labels.py). Only the owner (contributor_id) may change or
+app/pipeline/place_labels.py). Only the owner (contributor_id) may change or
 delete a label, and no read here is ever returned to other clients.
 """
 
@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.db.connection import get_conn
-from app.io_types.place_labels import PlaceLabel
+from app.pipeline.place_labels import PlaceLabel
 
 _COLUMNS = "label_id, contributor_id, category, lat, lng, radius_m, updated_at"
 

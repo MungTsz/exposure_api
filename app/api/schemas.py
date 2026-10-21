@@ -11,7 +11,8 @@ from app.config.io_types import PLACE_LABEL_CATEGORIES
 
 class IngestRequest(BaseModel):
     pid: str
-    # Raw location records; see app/etl/parsers for the accepted formats.
+    # Raw location records; see app/pipeline/parsers for the accepted formats.
+    # Only each record's time and position are read.
     features: List[Dict[str, Any]]
 
 
@@ -54,12 +55,21 @@ class HourlyRow(BaseModel):
     hour_start_hk: str
     start_time_hk: str
     io: str
-    # "label" if a place label decided io, "inferred" if the io type rules did.
+    # "label" if a place label decided io, "inferred" if the decision tree did.
     io_source: str
+    # Which branch of the decision tree decided io (constants.Reason).
+    reason: Optional[str] = None
+    # "stay" (one point for a whole stay) or "route" (one point of a route).
+    kind: Optional[str] = None
     delta_t_hours: float
     exposure_value: Optional[float] = None
     lng: Optional[float] = None
     lat: Optional[float] = None
+    # Route points: direction towards the next point, 0 = north, clockwise.
+    heading_deg: Optional[float] = None
+    compass: Optional[str] = None
+    # Vehicle points: the road the point is on.
+    road_name: Optional[str] = None
     # False = outside Hong Kong: not scored by expo_calx, exposure_value is null.
     in_hk: bool
 

@@ -4,3 +4,5 @@ __pycache__/
 *.db
 # Raw sample days are large; only the ones already tracked stay in git.
 data/samples/
+# Road centrelines (~38 MB): downloaded, see README "Road data".
+data/road_centrelines/

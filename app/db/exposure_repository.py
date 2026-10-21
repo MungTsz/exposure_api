@@ -1,12 +1,12 @@
 """
 Scored hourly exposure rows.
 
-One row per (pid, io, stay start time) - a clock hour can hold more than
-one row of the same io if separate stays land in it (e.g. two distinct
-outdoor trips within the same hour), so callers sum delta_t_hours/
-exposure_value across rows sharing an hour_start_hk+io for the chart, and
-use each row's own lng/lat (ordered by start_time_hk) to draw a route.
-Rows outside Hong Kong have in_hk = 0 and no exposure_value.
+One row per hourly slice of a point (app/pipeline/points.py): a stay is
+one point, a route several. A clock hour holds many rows of the same io
+(e.g. the points of one walk), so callers sum delta_t_hours/exposure_value
+across rows sharing an hour_start_hk+io for the chart, and use each row's
+own lng/lat (ordered by start_time_hk) to draw the day. Rows outside Hong
+Kong have in_hk = 0 and no exposure_value.
 
 A batch replaces the rows of its own time span (replace_hourly), so
 uploading a day again - e.g. after a place label was added - doesn't leave
@@ -52,18 +52,23 @@ def _upsert(conn, rows: List[Dict[str, Any]]) -> None:
     conn.executemany(
         """
         INSERT INTO hourly_exposure
-            (pid, hour_start_hk, start_time_hk, io, io_source, delta_t_hours, exposure_value, lng, lat, in_hk,
-             api_result_json)
+            (pid, hour_start_hk, start_time_hk, io, io_source, reason, kind, delta_t_hours, exposure_value,
+             lng, lat, heading_deg, compass, road_name, in_hk, api_result_json)
         VALUES
-            (:pid, :hour_start_hk, :start_time_hk, :io, :io_source, :delta_t_hours, :exposure_value, :lng, :lat,
-             :in_hk, :api_result_json)
+            (:pid, :hour_start_hk, :start_time_hk, :io, :io_source, :reason, :kind, :delta_t_hours, :exposure_value,
+             :lng, :lat, :heading_deg, :compass, :road_name, :in_hk, :api_result_json)
         ON CONFLICT(pid, io, start_time_hk) DO UPDATE SET
             hour_start_hk = excluded.hour_start_hk,
             io_source = excluded.io_source,
+            reason = excluded.reason,
+            kind = excluded.kind,
             delta_t_hours = excluded.delta_t_hours,
             exposure_value = excluded.exposure_value,
             lng = excluded.lng,
             lat = excluded.lat,
+            heading_deg = excluded.heading_deg,
+            compass = excluded.compass,
+            road_name = excluded.road_name,
             in_hk = excluded.in_hk,
             api_result_json = excluded.api_result_json
         """,
@@ -75,7 +80,8 @@ def get_hourly(pid: str) -> List[Dict[str, Any]]:
     with get_conn() as conn:
         cur = conn.execute(
             """
-            SELECT hour_start_hk, start_time_hk, io, io_source, delta_t_hours, exposure_value, lng, lat, in_hk
+            SELECT hour_start_hk, start_time_hk, io, io_source, reason, kind, delta_t_hours, exposure_value,
+                   lng, lat, heading_deg, compass, road_name, in_hk
             FROM hourly_exposure
             WHERE pid = ?
             ORDER BY start_time_hk

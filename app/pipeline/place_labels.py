@@ -4,7 +4,8 @@ Place labels: circles (centre + radius) that users put on a map to say
 everyone - a label describes the place, not the person who added it - so
 every pid's stays are checked against every contributor's labels.
 
-match_place_label picks the category for one stay:
+match_place_label picks the category for one stay (app/pipeline/classify.py
+passes the circles grown by PLACE_LABEL_DRIFT_MARGIN_M):
   1. Candidates: labels whose circle holds at least
      PLACE_LABEL_MIN_PING_FRACTION of the stay's pings.
   2. Best circle: most of the stay's pings inside, then the smaller radius
@@ -16,12 +17,12 @@ match_place_label picks the category for one stay:
 The result depends only on the labels, never on their order.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Dict, List, Optional, Sequence, Set
 
 from app.config import io_types as cfg
-from app.etl.geo import circle_overlap_ratio, distance_m, within_circle
-from app.etl.models import Ping
+from app.pipeline.geo import circle_overlap_ratio, distance_m, within_circle
+from app.pipeline.models import Ping
 
 
 @dataclass(frozen=True)
@@ -34,7 +35,12 @@ class PlaceLabel:
     radius_m: float
 
 
-def match_place_label(pings: List[Ping], labels: Sequence[PlaceLabel]) -> Optional[str]:
+def grow(labels: Sequence[PlaceLabel], extra_m: float = cfg.PLACE_LABEL_DRIFT_MARGIN_M) -> List[PlaceLabel]:
+    """The labels with every radius grown by extra_m (indoor GPS drift)."""
+    return [replace(label, radius_m=label.radius_m + extra_m) for label in labels]
+
+
+def match_place_label(pings: Sequence[Ping], labels: Sequence[PlaceLabel]) -> Optional[str]:
     """The category the labels give a stay with these pings, or None if no
     label matches."""
     if not pings or not labels:

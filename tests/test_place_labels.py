@@ -1,52 +1,32 @@
-import math
-
 import pytest
 
 from app.config import io_types as io_cfg
-from app.config.constants import EARTH_RADIUS_M, IoSource
-from app.etl.geo import circle_bbox, circle_overlap_ratio
-from app.etl.pipeline import run_pipeline
-from app.etl.stays import group_into_stays
-from app.io_types import registry
-from app.io_types.place_labels import PlaceLabel, match_place_label
-from tests.conftest import feature, ping
+from app.config.constants import IoSource, Reason
+from app.pipeline.classify import classify_runs
+from app.pipeline.geo import circle_bbox, circle_overlap_ratio
+from app.pipeline.models import Motion, Track
+from app.pipeline.place_labels import PlaceLabel, match_place_label
+from app.pipeline.run import run_pipeline
+from app.pipeline.runs import to_runs
+from tests.conftest import HOUR, at, feature, jittering, ping, road_index
 
-INDOOR_SECONDS = io_cfg.STAY_INDOOR_MINUTES * 60
-HOUR = 3600
-LNG, LAT = 114.0, 22.0  # conftest.ping default position
-M_PER_DEG_LAT = math.radians(1) * EARTH_RADIUS_M
-M_PER_DEG_LNG = M_PER_DEG_LAT * math.cos(math.radians(LAT))
-
-HOME, OFFICE, SCHOOL, OTHER = io_cfg.HOME_NAME, io_cfg.OFFICE_NAME, io_cfg.SCHOOL_NAME, io_cfg.OTHER_INDOOR_NAME
-
-
-def at(east_m: float = 0.0, north_m: float = 0.0):
-    """(lng, lat) this many meters east/north of (LNG, LAT)."""
-    return LNG + east_m / M_PER_DEG_LNG, LAT + north_m / M_PER_DEG_LAT
+HOME, OFFICE, SCHOOL, OTHER = io_cfg.HOME, io_cfg.OFFICE, io_cfg.SCHOOL, io_cfg.OTHER_INDOOR
 
 
 def label(label_id, category, radius_m, east_m=0.0, north_m=0.0, contributor_id=None):
-    lng, lat = at(east_m, north_m)
-    return PlaceLabel(label_id, contributor_id or f"c-{label_id}", category, lng, lat, radius_m)
+    return PlaceLabel(label_id, contributor_id or f"c-{label_id}", category, *at(east_m, north_m), radius_m)
 
 
 def pings_at(*offsets, start=12 * HOUR):
     """One ping per (east_m, north_m), a minute apart, from `start` seconds after 00:00 HK."""
-    out = []
-    for i, (east, north) in enumerate(offsets):
-        lng, lat = at(east, north)
-        out.append(ping(start + i * 60, lng=lng, lat=lat))
-    return out
+    return [ping(start + i * 60, east, north) for i, (east, north) in enumerate(offsets)]
 
 
-def indoor_stay(*offsets, start=12 * HOUR):
-    """Pings at the offsets, then one more far away to end an indoor-length stay."""
-    pings = pings_at(*offsets, start=start)
-    end = start + max(INDOOR_SECONDS, len(offsets) * 60)
-    lng, lat = at(east_m=5000)
-    stays = group_into_stays(pings + [ping(end, lng=lng, lat=lat)])
-    assert len(stays[0].pings) == len(offsets)
-    return stays
+def classify_stay(pings, labels):
+    """(io, io_source, reason) of one still run made of these pings."""
+    track = Track.from_pings(pings)
+    (c,) = classify_runs(track, to_runs([Motion.STILL] * len(pings)), labels)
+    return c.io, c.io_source, c.reason
 
 
 # --- geometry ---
@@ -59,17 +39,17 @@ def test_circle_overlap_ratio():
     assert 0.5 < partial < 1.0
 
 
-# --- matching ---
-
-
 def test_circle_bbox_holds_the_grown_circle():
     c = label("a", HOME, 25)
     min_lng, min_lat, max_lng, max_lat = circle_bbox(c, 30)
     for east, north in ((55, 0), (-55, 0), (0, 55), (0, -55)):
         lng, lat = at(east * 0.999, north * 0.999)
         assert min_lng <= lng <= max_lng and min_lat <= lat <= max_lat
-    lng, lat = at(east_m=56)
+    lng, _ = at(east_m=56)
     assert not (min_lng <= lng <= max_lng)
+
+
+# --- matching one stay against the labels ---
 
 def test_label_needs_half_the_pings():
     labels = [label("a", OFFICE, 10)]
@@ -124,71 +104,57 @@ def test_small_circle_inside_big_one_is_not_outvoted():
     assert match_place_label(pings_at((0, 0), (2, 2)), labels) == HOME
 
 
-# --- labelling stays ---
+# --- labels in the decision tree ---
 
-def test_label_overrides_time_window():
-    stays = registry.label_stays(indoor_stay((0, 0), (2, 2), start=14 * HOUR), [label("h", HOME, 25)])
-    assert (stays[0].io, stays[0].io_source) == (HOME, IoSource.LABEL.value)
-    assert (stays[0].lng, stays[0].lat) == at()
-
-    stays = registry.label_stays(indoor_stay((0, 0), (2, 2), start=2 * HOUR), [label("o", OFFICE, 25)])
-    assert (stays[0].io, stays[0].io_source) == (OFFICE, IoSource.LABEL.value)
+def test_label_comes_before_the_night_rule():
+    afternoon_home = jittering(14 * HOUR, 15 * HOUR, 60)
+    night_office = jittering(2 * HOUR, 3 * HOUR, 60)
+    assert classify_stay(afternoon_home, [label("h", HOME, 25)]) == (HOME, IoSource.LABEL, Reason.PLACE_LABEL)
+    assert classify_stay(night_office, [label("o", OFFICE, 25)]) == (OFFICE, IoSource.LABEL, Reason.PLACE_LABEL)
 
 
 def test_no_matching_label_keeps_the_rules():
-    stays = registry.label_stays(indoor_stay((0, 0), start=14 * HOUR), [label("h", HOME, 25, east_m=500)])
-    assert (stays[0].io, stays[0].io_source) == (OTHER, IoSource.INFERRED.value)
+    stay = jittering(14 * HOUR, 15 * HOUR, 60)
+    assert classify_stay(stay, [label("h", HOME, 25, east_m=500)]) == (OTHER, IoSource.INFERRED, Reason.LONG_STAY)
 
 
-def test_short_stay_in_a_circle_stays_outdoor():
-    stays = registry.label_stays(group_into_stays(pings_at((0, 0), (0, 5), (300, 0))), [label("o", OFFICE, 25)])
-    assert (stays[0].io, stays[0].io_source) == (io_cfg.OUTDOOR_NAME, IoSource.INFERRED.value)
+def test_short_stay_inside_a_label_gets_the_label():
+    stay = jittering(12 * HOUR, 12 * HOUR + 300, 60)
+    assert classify_stay(stay, [label("o", OFFICE, 25)])[0] == OFFICE
 
 
-
-def test_night_split_by_drift_is_one_office_visit():
-    # Indoor drift hops 22 m every 2 minutes, so every ping is its own short
-    # stay: alone each one is Outdoor; inside an Office circle the hour is Office.
-    offsets = [(0, 0) if i % 2 == 0 else (0, 22) for i in range(30)]
-    pings = [ping(2 * HOUR + i * 120, *at(*o)) for i, o in enumerate(offsets)]
-    stays = group_into_stays(pings + [ping(3 * HOUR, *at(east_m=5000))])
-    assert {s.io for s in registry.label_stays(stays)} == {io_cfg.OUTDOOR_NAME}
-
-    office, far = registry.label_stays(stays, [label("o", OFFICE, 25)])
-    assert (office.io, office.io_source) == (OFFICE, IoSource.LABEL.value)
-    assert (office.start_utc, office.end_utc) == (pings[0].utc, far.start_utc)
-    assert len(office.pings) == 30
-    assert (office.lng, office.lat) == at()
-    assert far.io == io_cfg.OUTDOOR_NAME
+@pytest.mark.parametrize("east_m, matches", [
+    (25 + io_cfg.PLACE_LABEL_DRIFT_MARGIN_M - 10, True),   # drifted outside the circle, within the margin
+    (25 + io_cfg.PLACE_LABEL_DRIFT_MARGIN_M + 20, False),  # beyond the margin
+])
+def test_drift_margin(east_m, matches):
+    stay = jittering(14 * HOUR, 15 * HOUR, 60, centre_m=(east_m, 0), jitter_m=5)
+    io = classify_stay(stay, [label("o", OFFICE, 25)])[0]
+    assert (io == OFFICE) is matches
 
 
-def test_stay_drifted_just_outside_the_circle_joins_the_visit():
-    # 01:00-01:30 drifted 40 m east (outside the 25 m circle, inside the drift
-    # margin) - on its own a Home stay - then 01:30-02:00 inside the circle.
-    drifted = [ping(HOUR + i * 300, *at(east_m=40)) for i in range(6)]
-    inside = [ping(HOUR + 1800 + i * 300, *at()) for i in range(6)]
-    stays = group_into_stays(drifted + inside + [ping(2 * HOUR, *at(east_m=5000))])
-    assert [s.io for s in registry.label_stays(stays)][:2] == [HOME, HOME]
+def test_a_night_at_a_labelled_office_does_not_make_its_area_home():
+    office_night = jittering(2 * HOUR, 5 * HOUR, 300)
+    # The walk run starts at the last office ping, so it holds the long gap
+    # and the evening stay is just 19:00-19:10.
+    walk = [ping(19 * HOUR - 600 + k * 10, east_m=k) for k in range(60)]
+    nearby = jittering(19 * HOUR, 19 * HOUR + 600, 60, centre_m=(0, 60))  # outside the grown 10 + 30 m circle
+    pings = office_night + walk + nearby
+    motions = [Motion.STILL] * len(office_night) + [Motion.WALK] * len(walk) + [Motion.STILL] * len(nearby)
+    track = Track.from_pings(pings)
 
-    office, far = registry.label_stays(stays, [label("o", OFFICE, 25)])
-    assert (office.io, office.start_utc, office.end_utc) == (OFFICE, drifted[0].utc, far.start_utc)
-    assert far.io == io_cfg.OUTDOOR_NAME
+    def ios(labels):
+        return [c.io for c in classify_runs(track, to_runs(motions), labels)]
 
-
-def test_stay_beyond_the_drift_margin_keeps_the_rules():
-    inside = [ping(HOUR + i * 300, *at()) for i in range(6)]
-    away = [ping(HOUR + 1800 + i * 300, *at(east_m=25 + io_cfg.PLACE_LABEL_DRIFT_MARGIN_M + 20)) for i in range(6)]
-    stays = group_into_stays(inside + away + [ping(2 * HOUR, *at(east_m=5000))])
-    labelled = registry.label_stays(stays, [label("o", OFFICE, 25)])
-    assert [(s.io, s.io_source) for s in labelled[:2]] == [
-        (OFFICE, IoSource.LABEL.value), (HOME, IoSource.INFERRED.value),
-    ]
+    assert ios([label("o", OFFICE, 10)]) == [OFFICE, io_cfg.OUTDOOR, io_cfg.OUTDOOR]
+    assert ios([]) == [HOME, io_cfg.OUTDOOR, HOME]  # unlabelled: the night stay is home, and so is its area
 
 
-def test_pipeline_slices_carry_io_source():
+def test_pipeline_points_carry_io_source():
     lng, lat = at()
-    features = [feature(12 * HOUR, lng=lng, lat=lat), feature(12 * HOUR + INDOOR_SECONDS, lng=lng, lat=lat)]
-    (labelled,) = run_pipeline(features, [label("s", SCHOOL, 25)]).slices
-    assert (labelled.io, labelled.io_source) == (SCHOOL, IoSource.LABEL.value)
-    (inferred,) = run_pipeline(features).slices
-    assert (inferred.io, inferred.io_source) == (OTHER, IoSource.INFERRED.value)
+    features = [feature(12 * HOUR + k * 60, lng=lng, lat=lat) for k in range(21)]
+    roads = road_index()
+    (labelled,) = run_pipeline(features, roads, [label("s", SCHOOL, 25)]).points
+    assert (labelled.io, labelled.io_source) == (SCHOOL, IoSource.LABEL)
+    (inferred,) = run_pipeline(features, roads).points
+    assert (inferred.io, inferred.io_source) == (OTHER, IoSource.INFERRED)

@@ -1,68 +1,54 @@
 """
-Settings for each io type (Home, Office, School, Other Indoor, Outdoor, and
-later Bus, ...) and for matching place labels:
-  - NAME: the label stored in the DB `io` column and returned to the app.
-  - API_LABEL: the value sent to expo_calx in each request row's
-    {"IO": ...}. expo_calx has its own vocabulary, so this can differ from
-    NAME.
-  - Any thresholds the io type's rule (app/io_types/rules/) uses.
+The io types, and the thresholds of the decision tree that picks one for
+each run (app/pipeline/classify.py).
 
-One section per io type. To add a new one, see app/io_types/registry.py.
+Each io type has a name (stored in the DB `io` column and returned to the
+app) and an API label (sent to expo_calx as {"IO": label}). expo_calx has
+its own vocabulary, so the two can differ.
 """
 
-# --- Indoor (shared by Home and Other Indoor) ---
-# A stay lasting at least this long is indoor: Home or Other Indoor.
-# NOTE on the "waiting for the bus" problem: a genuinely-indoor ~20min stop
-# and an outdoor ~20min transit wait are, by design, indistinguishable by
-# stay duration/box/speed alone - raising STAY_INDOOR_MINUTES (and/or
-# tightening pipeline.STAY_DEGREE_THRESHOLD/SPEED_THRESHOLD_MPS) is a tuning
-# tradeoff to reduce false-indoor bus-wait classifications, not a structural
-# fix; it will also delay genuinely-indoor classification by the same
-# amount.
-STAY_INDOOR_MINUTES = 20
+# --- Names ---
+HOME = "Home"
+OFFICE = "Office"
+SCHOOL = "School"
+OTHER_INDOOR = "Other Indoor"
+OUTDOOR = "Outdoor"
+MTR = "MTR"
+VEHICLE = "Vehicle"  # taxi, bus, minibus, shuttle bus, car, motorcycle
 
-# --- Home ---
-HOME_NAME = "Home"
-HOME_API_LABEL = "Home"
-# An indoor stay is Home if it starts at an HK-local hour in
-# [HOME_START_HOUR_HK, HOME_END_HOUR_HK), i.e. 00:00-05:59 by default.
-HOME_START_HOUR_HK = 0
-HOME_END_HOUR_HK = 6
+# --- expo_calx labels ---
+# If expo_calx renames one, change it here, nothing else.
+API_LABELS = {
+    HOME: "Home",
+    OFFICE: "Office",
+    SCHOOL: "School",
+    OTHER_INDOOR: "Other Indoor",
+    OUTDOOR: "Outdoor",
+    MTR: "MTR",
+    VEHICLE: "Vehicle",
+}
+IO_TYPES = tuple(API_LABELS)
 
-# --- Office ---
-# Only assigned through a place label (see "Place labels" below).
-OFFICE_NAME = "Office"
-OFFICE_API_LABEL = "Office"
+# --- Stays (still runs without a place label) ---
+# A stay at least this long is indoor; a shorter one is Outdoor (waiting for
+# a bus and a quick shop visit look the same).
+INDOOR_MIN_S = 20 * 60
+# Home: a long stay overlapping these HK hours [start, end) of any day ...
+HOME_HOURS = (0, 6)
+# ... and any other stay of the same upload within this distance of such a
+# night stay (|dlat| + |dlng|, ~100 m).
+HOME_RADIUS_DEG = 0.001
+# Office and School are never guessed: without a place label they are
+# Other Indoor.
 
-# --- School ---
-# Only assigned through a place label (see "Place labels" below).
-SCHOOL_NAME = "School"
-SCHOOL_API_LABEL = "School"
-
-# --- Other Indoor ---
-# Any indoor stay that isn't Home.
-OTHER_INDOOR_NAME = "Other Indoor"
-OTHER_INDOOR_API_LABEL = "Other Indoor"
-
-# --- Outdoor ---
-# Fallback: any stay no other io type claims.
-OUTDOOR_NAME = "Outdoor"
-OUTDOOR_API_LABEL = "Outdoor"
-
-# --- Place labels (app/io_types/place_labels.py) ---
-# Circles users put on a map (PUT /place-labels/{label_id}). A visit to a
-# labelled place gets the label's category as its io type, instead of the
-# rules above (so an Office circle at 02:00 is Office, not Home). A visit is
-# a run of consecutive stays inside the circle - indoor GPS drift splits a
-# night into many short stays - plus neighbouring stays drifted just
-# outside it (PLACE_LABEL_DRIFT_MARGIN_M). It counts once it lasts at least
-# STAY_INDOOR_MINUTES, so walking past an office stays Outdoor.
-#
-# Categories a label can have; each one is an io type NAME.
-PLACE_LABEL_CATEGORIES = (HOME_NAME, OFFICE_NAME, SCHOOL_NAME, OTHER_INDOOR_NAME)
-# A label matches a stay when its circle holds at least this fraction of
-# the stay's pings. Checking all pings (not just the first) absorbs indoor
-# GPS drift of 20-50 m.
+# --- Place labels (app/pipeline/place_labels.py) ---
+# Circles users put on a map (PUT /place-labels/{label_id}). A stay inside a
+# label gets the label's category, whatever the rules above say (a night at
+# a labelled office is Office).
+PLACE_LABEL_CATEGORIES = (HOME, OFFICE, SCHOOL, OTHER_INDOOR)
+# Indoor GPS drifts 20-50 m, so every circle is grown by this much ...
+PLACE_LABEL_DRIFT_MARGIN_M = 30.0
+# ... and matches a stay when it holds at least this share of its pings.
 PLACE_LABEL_MIN_PING_FRACTION = 0.5
 # Two matching circles describe the same spot when their overlap area /
 # union area is at least this. Labels for the same spot are put to a vote:
@@ -70,8 +56,3 @@ PLACE_LABEL_MIN_PING_FRACTION = 0.5
 # inside a much bigger one is not the same spot, so the smaller (more
 # specific) circle is not outvoted by the bigger one.
 PLACE_LABEL_SAME_SPOT_MIN_OVERLAP = 0.5
-# A stay next to a visit (just before or after it) joins the visit if it
-# would match the same category with every circle's radius grown by this
-# much. Absorbs indoor GPS drift of 20-50 m past the circle's edge without
-# letting a walk away from the place join.
-PLACE_LABEL_DRIFT_MARGIN_M = 30.0
