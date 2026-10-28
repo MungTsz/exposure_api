@@ -5,8 +5,8 @@ Pipeline output on the real sample days in data/samples/.
   each GeoJSON sample day; the pipeline must not change them by accident.
   Regenerate with `python -m tests.fixtures.update_golden` only for an
   intended change.
-- 1009, 1011 and 1012 (GPX) are checked against what the person actually
-  did that day (taxi, bus, MTR including the above-ground East Rail line
+- 1009-1012 (GPX) are checked against what the person actually did that
+  day (taxi, bus, walking, MTR including the above-ground East Rail line
   and an underground ride with a fix at each station).
 
 Samples and the road centrelines are not in git: a test whose files are
@@ -88,6 +88,9 @@ TIMELINES = {
     "1009": [
         ("2026-10-09 23:03", MTR),           # Kwun Tong line, a fix at each station (Lok Fu, Kowloon Tong, ...)
         ("2026-10-09 23:06", MTR),
+    ],
+    "1010": [
+        ("2026-10-10 21:45", OUTDOOR),       # walk in Tai Kok Tsui; GPS caught up with 350 m in one 2 s jump
     ],
     "1011": [
         ("2026-10-11 12:40", OUTDOOR),       # walk to Telford Plaza

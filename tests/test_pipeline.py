@@ -143,6 +143,22 @@ def test_short_turn_back_and_real_moves_are_kept():
     assert remove_spikes(move) == move
 
 
+@pytest.mark.parametrize("a, bad, c", [
+    (ping(0), ping(6, east_m=150), ping(7, north_m=50)),             # 150 m off, back on the track 1 s later
+    (ping(0), ping(50, east_m=1500), ping(57, east_m=1100)),         # overshoots the car by 400 m
+])
+def test_fix_only_an_impossible_speed_could_reach_is_removed(a, bad, c):
+    assert remove_spikes([a, bad, c]) == [a, c]
+
+
+@pytest.mark.parametrize("repeat_s, removed", [(cfg.SPIKE_MAX_S, True), (cfg.SPIKE_MAX_S + 60, False)])
+def test_repeated_fallback_fix_is_one_spike_unless_it_lasts(repeat_s, removed):
+    a, c = ping(0), ping(repeat_s + 120, east_m=5)
+    repeats = [ping(t, north_m=150) for t in (60, 80, 60 + repeat_s)]
+    expected = [a, c] if removed else [a, *repeats, c]
+    assert remove_spikes([a, *repeats, c]) == expected
+
+
 # --- step 1: motion ---
 
 def test_jitter_in_place_is_still():
@@ -251,6 +267,19 @@ def test_many_jumps_in_a_row_is_sparse_logging_not_mtr(stops, expected):
     track, runs = track_and_runs((J, pings))
     roads = road_index([(-100, 0), (100000, 0)]).nearest(track.pings)  # on the road
     assert [r.motion for r in find_mtr(track, runs, roads)] == [expected]
+
+
+@pytest.mark.parametrize("east_m, expected", [
+    (350, W),    # data/samples/1010 21:45: GPS caught up with a walk in one 2 s jump
+    (1000, J),
+])
+def test_jump_run_shorter_than_an_mtr_ride_is_a_walk(east_m, expected):
+    track, runs = track_and_runs(
+        (S, jittering(0, 600, 10)),
+        (J, [ping(602, east_m=east_m)]),
+        (S, jittering(610, 1200, 10, centre_m=(east_m, 0))),
+    )
+    assert [r.motion for r in find_mtr(track, runs, far_roads(track))] == [S, expected, S]
 
 
 def test_jump_too_fast_for_mtr_started_earlier():

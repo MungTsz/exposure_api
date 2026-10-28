@@ -17,10 +17,20 @@ Units:
 
 # --- Step 0: spikes (app/pipeline/spikes.py) ---
 # Ping B of A, B, C is a spike when A->B and B->C are both at least
-# SPIKE_MIN_DEG (~100 m) and C is back within SPIKE_RETURN_RATIO of the
-# shorter leg from A: GPS jumped away and straight back.
+# SPIKE_MIN_DEG (~100 m) and either
+#   - C is back within SPIKE_RETURN_RATIO of the shorter leg from A: GPS
+#     jumped away and straight back, or
+#   - reaching or leaving B takes more than SPIKE_MAX_V (~50 m/s, faster
+#     than any HK road or MTR train) while A -> C directly does not: a
+#     stale or overshooting fix (sample days: 100-450 m in 1-7 s, then
+#     back on the track).
+# Consecutive pings at exactly the same position count as one B (watch
+# data repeats a fallback fix for minutes) as long as they span at most
+# SPIKE_MAX_S; a longer one is a stay, never a spike.
 SPIKE_MIN_DEG = 0.001
 SPIKE_RETURN_RATIO = 0.25
+SPIKE_MAX_V = 0.0005        # deg/s
+SPIKE_MAX_S = 300
 
 # --- Step 1: motion of each interval (app/pipeline/motion.py) ---
 # Indoor GPS jitter moves a still phone by ~0.0001-0.0002 deg (10-20 m) per
@@ -57,6 +67,12 @@ SAME_PLACE_MAX_WALK_S = 300
 # treated as a vehicle run and the rail test below decides. When the two
 # can't be told apart, the default is Vehicle.
 MTR_MAX_JUMPS = 5
+# A jump run whose first and last pings are closer than this (~500 m, under
+# one MTR stop) is not an underground ride but a walk the GPS caught up
+# with late or logged rarely: real rides on the sample days covered
+# 0.012 deg and more, the walks taken for MTR 0.0033-0.0039 deg
+# (data/samples/1010 21:45, 20260901 14:34). When in doubt, Outdoor.
+MTR_MIN_DEG = 0.005
 # Rail test: a vehicle run inside Hong Kong whose pings are at a median of
 # at least this many metres from the nearest road centreline is
 # above-ground MTR. A car / bus drives on the centreline (road trips so

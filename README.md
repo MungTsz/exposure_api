@@ -102,7 +102,7 @@ Terms used throughout the code:
 | term | meaning |
 |---|---|
 | **ping** | one GPS point: time, lng, lat |
-| **spike** | a single bad ping where GPS jumps far away and straight back |
+| **spike** | a single bad ping (or a fix repeated for a few minutes) where GPS jumps far away and straight back, or that only an impossible speed could reach |
 | **track** | the day's pings (spikes removed) with the time and distance between consecutive pings |
 | **interval** | the time from one ping to the next |
 | **motion** | what an interval (or run) looks like: `jump` (moved 300 m+ while GPS was dark), `still`, `walk`, `vehicle`; step 3 adds `rail` and `interchange` |
@@ -120,7 +120,10 @@ Terms used throughout the code:
 Steps (`app/pipeline/run.py`; thresholds in `app/config/pipeline.py`):
 
 0. **Remove spikes**: drop ping B of A, B, C when A->B and B->C are both
-   ~100 m+ and C is back near A.
+   ~100 m+ and either C is back near A, or reaching / leaving B needs more
+   than ~50 m/s while A->C does not (a stale or overshooting fix). Pings
+   repeating B's exact position for up to 5 minutes count as B (watch
+   data falls back to a fixed position, e.g. a cell tower's).
 1. **Motion of each interval**: `jump` if it moved >= 0.003 deg (~300 m);
    `still` if it lasted >= 120 s (no pings in between) or its `v_net` is
    below ~0.5 m/s; `walk` below ~3 m/s; else `vehicle`. A ping's own speed
@@ -135,7 +138,9 @@ Steps (`app/pipeline/run.py`; thresholds in `app/config/pipeline.py`):
 3. **MTR**: first, a jump run with more than 5 jumps is a phone that logs
    rarely while moving (watch data: 7-20 jumps per ride; an underground
    ride has 1-4), so it becomes a vehicle run - Vehicle is the default
-   when the two can't be told apart. Then the **rail test** - a vehicle run
+   when the two can't be told apart. A jump run covering less than
+   0.005 deg (~500 m, under one MTR stop) is a walk the GPS caught up with
+   late, so it becomes a walk run - Outdoor when in doubt. Then the **rail test** - a vehicle run
    inside Hong Kong whose pings are at a median of >= 15 m from the nearest
    road centreline is above-ground MTR (a car drives on the centreline: 2-6 m on the sample
    days; the East Rail line runs beside the roads: 24 m). A jump faster than

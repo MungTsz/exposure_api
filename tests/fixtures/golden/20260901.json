@@ -51,7 +51,7 @@
    "reason": "long_stay",
    "kind": "stay",
    "lng": 114.2637786,
-   "lat": 22.3365088,
+   "lat": 22.3365099,
    "heading_deg": null,
    "compass": null,
    "road_name": null,
@@ -339,30 +339,16 @@
   },
   {
    "start_time_hk": "20260901121700",
-   "end_time_hk": "20260901121717",
+   "end_time_hk": "20260901121719",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.24234428,
    "lat": 22.31693248,
-   "heading_deg": 230.48430849340693,
+   "heading_deg": 229.67125170816794,
    "compass": "SW",
    "road_name": "TSEUNG KWAN O TUNNEL ROAD",
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260901121717",
-   "end_time_hk": "20260901121719",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.239607,
-   "lat": 22.3148442,
-   "heading_deg": 53.23954482058525,
-   "compass": "NE",
-   "road_name": "TSEUNG KWAN O ROAD",
    "in_hk": true
   },
   {
@@ -998,9 +984,9 @@
   {
    "start_time_hk": "20260901143402",
    "end_time_hk": "20260901143503",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.1807615,
    "lat": 22.2801002,
@@ -1403,72 +1389,30 @@
   },
   {
    "start_time_hk": "20260901145414",
-   "end_time_hk": "20260901145414",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.2686586,
-   "lat": 22.3226493,
-   "heading_deg": null,
-   "compass": null,
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260901145414",
-   "end_time_hk": "20260901145435",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.2686586,
-   "lat": 22.3226493,
-   "heading_deg": 201.47671852918202,
-   "compass": "S",
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260901145435",
    "end_time_hk": "20260901145439",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.2676348,
-   "lat": 22.3202424,
-   "heading_deg": 23.994762674478693,
+   "lng": 114.2686586,
+   "lat": 22.3226493,
+   "heading_deg": 32.57621213750883,
    "compass": "NE",
-   "road_name": "YUE ON LANE",
+   "road_name": null,
    "in_hk": true
   },
   {
    "start_time_hk": "20260901145439",
-   "end_time_hk": "20260901145539",
+   "end_time_hk": "20260901145541",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.2691019,
    "lat": 22.32329104,
-   "heading_deg": 332.0914443418349,
+   "heading_deg": 321.8507244952737,
    "compass": "NW",
    "road_name": "CLEAR WATER BAY ROAD",
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260901145539",
-   "end_time_hk": "20260901145541",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.2645402,
-   "lat": 22.3312572,
-   "heading_deg": 183.11736767454593,
-   "compass": "S",
-   "road_name": null,
    "in_hk": true
   },
   {
@@ -1719,7 +1663,7 @@
    "20260901101200",
    "golden",
    114.2637786,
-   22.3365088,
+   22.3365099,
    {
     "IO": "Other Indoor"
    },
@@ -1729,7 +1673,7 @@
    "20260901110000",
    "golden",
    114.2637786,
-   22.3365088,
+   22.3365099,
    {
     "IO": "Other Indoor"
    },
@@ -1739,7 +1683,7 @@
    "20260901120000",
    "golden",
    114.2637786,
-   22.3365088,
+   22.3365099,
    {
     "IO": "Other Indoor"
    },
@@ -1953,17 +1897,7 @@
    {
     "IO": "Vehicle"
    },
-   0.004845
-  ],
-  [
-   "20260901121717",
-   "golden",
-   114.239607,
-   22.3148442,
-   {
-    "IO": "Vehicle"
-   },
-   0.000432
+   0.005278
   ],
   [
    "20260901121719",
@@ -2441,7 +2375,7 @@
    114.1807615,
    22.2801002,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.016882
   ],
@@ -2733,27 +2667,7 @@
    {
     "IO": "Vehicle"
    },
-   1e-06
-  ],
-  [
-   "20260901145414",
-   "golden",
-   114.2686586,
-   22.3226493,
-   {
-    "IO": "Vehicle"
-   },
-   0.005717
-  ],
-  [
-   "20260901145435",
-   "golden",
-   114.2676348,
-   22.3202424,
-   {
-    "IO": "Vehicle"
-   },
-   0.00098
+   0.006697
   ],
   [
    "20260901145439",
@@ -2763,17 +2677,7 @@
    {
     "IO": "Vehicle"
    },
-   0.016697
-  ],
-  [
-   "20260901145539",
-   "golden",
-   114.2645402,
-   22.3312572,
-   {
-    "IO": "Vehicle"
-   },
-   0.000525
+   0.017222
   ],
   [
    "20260901145541",

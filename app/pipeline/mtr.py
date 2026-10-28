@@ -1,9 +1,11 @@
 """
 Step 3: find the MTR rides among the runs.
 
-  3a  sparse logging: a jump run with more than MTR_MAX_JUMPS jumps is a
-      moving phone that logs rarely, not an underground ride -> vehicle
-      (so 3b decides between MTR and Vehicle; Vehicle when in doubt)
+  3a  not underground: a jump run with more than MTR_MAX_JUMPS jumps is a
+      moving phone that logs rarely -> vehicle (so 3b decides between MTR
+      and Vehicle; Vehicle when in doubt); a jump run covering less than
+      MTR_MIN_DEG is shorter than any MTR ride -> walk (Outdoor when in
+      doubt)
   3b  rail test: a vehicle run inside Hong Kong whose pings are at a median
       of >= RAIL_MIN_ROAD_M from the nearest road centreline is
       above-ground MTR (a car drives on the centreline, a train beside the
@@ -35,14 +37,14 @@ _MTR_MOTIONS = (Motion.JUMP, Motion.RAIL)
 def find_mtr(track: Track, runs: Sequence[Run], roads: Sequence[NearestRoad]) -> List[Run]:
     """3a-3d on the runs of build_runs; `roads` holds each ping's nearest road."""
     motions = to_motions(runs)
-    _sparse_logging(track, motions)
+    _not_underground(track, motions)
     _rail_test(track, motions, roads)
     _extend_jumps(track, motions)
     _interchanges(track, motions)
     return to_runs(motions)
 
 
-def _sparse_logging(track: Track, motions: List[Motion]) -> None:
+def _not_underground(track: Track, motions: List[Motion]) -> None:
     """3a."""
     for run in to_runs(motions):
         if run.motion != Motion.JUMP:
@@ -50,6 +52,8 @@ def _sparse_logging(track: Track, motions: List[Motion]) -> None:
         jumps = sum(1 for i in range(run.first, run.last + 1) if track.dd_deg[i] >= cfg.JUMP_DEG)
         if jumps > cfg.MTR_MAX_JUMPS:
             motions[run.first:run.last + 1] = [Motion.VEHICLE] * (run.last - run.first + 1)
+        elif deg_between(track.pings[run.first_ping], track.pings[run.last]) < cfg.MTR_MIN_DEG:
+            motions[run.first:run.last + 1] = [Motion.WALK] * (run.last - run.first + 1)
 
 
 def _rail_test(track: Track, motions: List[Motion], roads: Sequence[NearestRoad]) -> None:

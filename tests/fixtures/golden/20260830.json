@@ -2986,9 +2986,9 @@
   {
    "start_time_hk": "20260830133102",
    "end_time_hk": "20260830133203",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2405452,
    "lat": 22.2613301,
@@ -3084,9 +3084,9 @@
   {
    "start_time_hk": "20260830134020",
    "end_time_hk": "20260830134121",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2393844,
    "lat": 22.2638234,
@@ -3098,9 +3098,9 @@
   {
    "start_time_hk": "20260830134121",
    "end_time_hk": "20260830134153",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2392355,
    "lat": 22.2633022,
@@ -3112,9 +3112,9 @@
   {
    "start_time_hk": "20260830134153",
    "end_time_hk": "20260830134257",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2405016,
    "lat": 22.2612546,
@@ -3895,156 +3895,100 @@
   },
   {
    "start_time_hk": "20260830142024",
-   "end_time_hk": "20260830142044",
+   "end_time_hk": "20260830142102",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.2310624,
    "lat": 22.2994592,
-   "heading_deg": 62.734719338308196,
+   "heading_deg": 54.41878341981197,
    "compass": "NE",
    "road_name": "EASTERN HARBOUR CROSSING",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830142044",
-   "end_time_hk": "20260830142047",
+   "start_time_hk": "20260830142102",
+   "end_time_hk": "20260830142115",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.2356077,
-   "lat": 22.3016259,
-   "heading_deg": null,
-   "compass": null,
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830142047",
-   "end_time_hk": "20260830142050",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.2356077,
-   "lat": 22.3016259,
-   "heading_deg": 244.15605393022696,
-   "compass": "SW",
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830142050",
-   "end_time_hk": "20260830142105",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.23131627,
-   "lat": 22.29970329,
-   "heading_deg": 56.665912892700646,
+   "lng": 114.23289219,
+   "lat": 22.30067004,
+   "heading_deg": 56.20322660411648,
    "compass": "NE",
    "road_name": "EASTERN HARBOUR CROSSING",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830142105",
+   "start_time_hk": "20260830142115",
    "end_time_hk": "20260830142116",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.2333133,
-   "lat": 22.30091821,
-   "heading_deg": 54.894651830293014,
+   "lng": 114.23468066,
+   "lat": 22.30177732,
+   "heading_deg": 45.21892107800687,
    "compass": "NE",
    "road_name": "EASTERN HARBOUR CROSSING",
    "in_hk": true
   },
   {
    "start_time_hk": "20260830142116",
-   "end_time_hk": "20260830142119",
+   "end_time_hk": "20260830142125",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.23479248,
    "lat": 22.30187996,
-   "heading_deg": 35.091350799625616,
+   "heading_deg": 24.84451658658935,
    "compass": "NE",
    "road_name": "EASTERN HARBOUR CROSSING",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830142119",
-   "end_time_hk": "20260830142122",
+   "start_time_hk": "20260830142125",
+   "end_time_hk": "20260830142134",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.23506216,
-   "lat": 22.30223499,
-   "heading_deg": 25.417935286923353,
-   "compass": "NE",
-   "road_name": "EASTERN HARBOUR CROSSING",
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830142122",
-   "end_time_hk": "20260830142128",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.23526256,
-   "lat": 22.30262504,
-   "heading_deg": 8.879423225349512,
+   "lng": 114.23537612,
+   "lat": 22.30304589,
+   "heading_deg": 352.7532491028872,
    "compass": "N",
    "road_name": "EASTERN HARBOUR CROSSING",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830142128",
-   "end_time_hk": "20260830142137",
+   "start_time_hk": "20260830142134",
+   "end_time_hk": "20260830142136",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.23540983,
-   "lat": 22.30349695,
-   "heading_deg": 341.8702016101643,
-   "compass": "N",
-   "road_name": "TSEUNG LAM HIGHWAY",
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830142137",
-   "end_time_hk": "20260830142139",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.2349501,
-   "lat": 22.30479564,
-   "heading_deg": 323.1520759958661,
+   "lng": 114.23519215,
+   "lat": 22.30438408,
+   "heading_deg": 332.6211210563025,
    "compass": "NW",
    "road_name": "EASTERN HARBOUR CROSSING",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830142139",
+   "start_time_hk": "20260830142136",
    "end_time_hk": "20260830142147",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.23474412,
-   "lat": 22.30504987,
-   "heading_deg": 319.65980031945384,
+   "lng": 114.23503817,
+   "lat": 22.30465909,
+   "heading_deg": 321.1962757200347,
    "compass": "NW",
-   "road_name": "SCENEWAY ROAD",
+   "road_name": null,
    "in_hk": true
   },
   {
@@ -4119,42 +4063,28 @@
   },
   {
    "start_time_hk": "20260830142229",
-   "end_time_hk": "20260830142234",
+   "end_time_hk": "20260830142235",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.23062666,
    "lat": 22.30950785,
-   "heading_deg": 351.90313143912584,
+   "heading_deg": 358.16225837744713,
    "compass": "N",
    "road_name": "KWUN TONG BYPASS",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830142234",
-   "end_time_hk": "20260830142244",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.23057829,
-   "lat": 22.30982233,
-   "heading_deg": 35.55257835190935,
-   "compass": "NE",
-   "road_name": "TSEUNG KWAN O ROAD",
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830142244",
+   "start_time_hk": "20260830142235",
    "end_time_hk": "20260830142251",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.231218,
-   "lat": 22.31065025,
-   "heading_deg": 51.035201913454614,
+   "lng": 114.23061322,
+   "lat": 22.30989529,
+   "heading_deg": 43.56954968351863,
    "compass": "NE",
    "road_name": "TSEUNG KWAN O ROAD",
    "in_hk": true
@@ -4287,98 +4217,70 @@
   },
   {
    "start_time_hk": "20260830142429",
-   "end_time_hk": "20260830142520",
+   "end_time_hk": "20260830142527",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.24275427,
    "lat": 22.31762069,
-   "heading_deg": 67.69800393199,
-   "compass": "E",
+   "heading_deg": 62.99158805866381,
+   "compass": "NE",
    "road_name": "TSEUNG KWAN O TUNNEL ROAD",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830142520",
-   "end_time_hk": "20260830142527",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.2539163,
-   "lat": 22.3218554,
-   "heading_deg": 258.9786947873957,
-   "compass": "W",
-   "road_name": "TO LOK ROAD",
-   "in_hk": true
-  },
-  {
    "start_time_hk": "20260830142527",
-   "end_time_hk": "20260830142542",
+   "end_time_hk": "20260830142537",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.25038848,
    "lat": 22.32121987,
-   "heading_deg": 86.27761881118573,
+   "heading_deg": 85.01287080751439,
    "compass": "E",
    "road_name": "TSEUNG KWAN O TUNNEL ROAD",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830142542",
+   "start_time_hk": "20260830142537",
    "end_time_hk": "20260830142545",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.25291306,
-   "lat": 22.32137179,
-   "heading_deg": 99.11449221370805,
+   "lng": 114.25208982,
+   "lat": 22.32135719,
+   "heading_deg": 92.82820687622569,
    "compass": "E",
    "road_name": "TSEUNG KWAN O TUNNEL ROAD",
    "in_hk": true
   },
   {
    "start_time_hk": "20260830142545",
-   "end_time_hk": "20260830142550",
+   "end_time_hk": "20260830142552",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.25342151,
    "lat": 22.32129634,
-   "heading_deg": 110.79821065992775,
-   "compass": "E",
-   "road_name": "TSEUNG KWAN O TUNNEL ROAD",
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830142550",
-   "end_time_hk": "20260830142556",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.25427526,
-   "lat": 22.3209964,
-   "heading_deg": 126.95413948804043,
+   "heading_deg": 113.88875596390511,
    "compass": "SE",
    "road_name": "TSEUNG KWAN O TUNNEL ROAD",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830142556",
+   "start_time_hk": "20260830142552",
    "end_time_hk": "20260830142558",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.25511438,
-   "lat": 22.32041251,
-   "heading_deg": 138.451578972648,
+   "lng": 114.25459206,
+   "lat": 22.32081681,
+   "heading_deg": 132.6793885028004,
    "compass": "SE",
    "road_name": "TSEUNG KWAN O TUNNEL ROAD",
    "in_hk": true
@@ -4427,56 +4329,70 @@
   },
   {
    "start_time_hk": "20260830142628",
-   "end_time_hk": "20260830142636",
+   "end_time_hk": "20260830142629",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.25852185,
    "lat": 22.31715476,
-   "heading_deg": 117.41628003692011,
+   "heading_deg": 122.9675250374728,
    "compass": "SE",
    "road_name": "WAN LUNG ROAD",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830142636",
-   "end_time_hk": "20260830142641",
+   "start_time_hk": "20260830142629",
+   "end_time_hk": "20260830142637",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.25957944,
-   "lat": 22.31664735,
-   "heading_deg": 87.26360865893173,
+   "lng": 114.25864895,
+   "lat": 22.31707851,
+   "heading_deg": 114.69115291241832,
+   "compass": "SE",
+   "road_name": "TSEUNG KWAN O TUNNEL ROAD",
+   "in_hk": true
+  },
+  {
+   "start_time_hk": "20260830142637",
+   "end_time_hk": "20260830142642",
+   "io": "Vehicle",
+   "io_source": "inferred",
+   "reason": "vehicle",
+   "kind": "route",
+   "lng": 114.25972386,
+   "lat": 22.3166214,
+   "heading_deg": 79.79510603418964,
    "compass": "E",
    "road_name": "TSEUNG KWAN O TUNNEL ROAD",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830142641",
-   "end_time_hk": "20260830142646",
+   "start_time_hk": "20260830142642",
+   "end_time_hk": "20260830142647",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.26029311,
-   "lat": 22.3166789,
-   "heading_deg": 53.654774739189804,
+   "lng": 114.2604269,
+   "lat": 22.31673846,
+   "heading_deg": 49.17247597648958,
    "compass": "NE",
    "road_name": "TSEUNG KWAN O TUNNEL ROAD",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830142646",
+   "start_time_hk": "20260830142647",
    "end_time_hk": "20260830142650",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.26088697,
-   "lat": 22.31708306,
-   "heading_deg": 41.09463588408346,
+   "lng": 114.26098388,
+   "lat": 22.31718358,
+   "heading_deg": 40.8846973712067,
    "compass": "NE",
    "road_name": "TSEUNG KWAN O TUNNEL ROAD",
    "in_hk": true
@@ -4819,112 +4735,112 @@
   },
   {
    "start_time_hk": "20260830143111",
-   "end_time_hk": "20260830143125",
+   "end_time_hk": "20260830143126",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.26241903,
    "lat": 22.33060403,
-   "heading_deg": 32.07296956481326,
+   "heading_deg": 31.04120925124454,
    "compass": "NE",
    "road_name": "CLEAR WATER BAY ROAD",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830143125",
-   "end_time_hk": "20260830143138",
+   "start_time_hk": "20260830143126",
+   "end_time_hk": "20260830143142",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.26292853,
-   "lat": 22.33135607,
-   "heading_deg": 14.12868091201591,
+   "lng": 114.26296064,
+   "lat": 22.33143641,
+   "heading_deg": 10.963367855688261,
    "compass": "N",
    "road_name": "NGAN YING ROAD",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830143138",
+   "start_time_hk": "20260830143142",
    "end_time_hk": "20260830143144",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.26321262,
-   "lat": 22.33239998,
-   "heading_deg": 1.9355459646015447,
+   "lng": 114.26322574,
+   "lat": 22.33270219,
+   "heading_deg": 1.0850873910252972,
    "compass": "N",
    "road_name": null,
    "in_hk": true
   },
   {
    "start_time_hk": "20260830143144",
-   "end_time_hk": "20260830143204",
+   "end_time_hk": "20260830143205",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.26322839,
    "lat": 22.3328316,
-   "heading_deg": 357.1013558634811,
+   "heading_deg": 356.75258519592074,
    "compass": "N",
    "road_name": null,
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830143204",
-   "end_time_hk": "20260830143228",
+   "start_time_hk": "20260830143205",
+   "end_time_hk": "20260830143227",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.26319591,
-   "lat": 22.33342492,
-   "heading_deg": 334.0625372459398,
+   "lng": 114.26319108,
+   "lat": 22.33343982,
+   "heading_deg": 332.79947515789144,
    "compass": "NW",
    "road_name": null,
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830143228",
+   "start_time_hk": "20260830143227",
    "end_time_hk": "20260830143241",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.26265073,
-   "lat": 22.33446168,
-   "heading_deg": 359.18114002118205,
+   "lng": 114.26265676,
+   "lat": 22.33440144,
+   "heading_deg": 358.86846030593745,
    "compass": "N",
    "road_name": null,
    "in_hk": true
   },
   {
    "start_time_hk": "20260830143241",
-   "end_time_hk": "20260830143258",
+   "end_time_hk": "20260830143259",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.26263831,
    "lat": 22.33526543,
-   "heading_deg": 359.37412931400337,
+   "heading_deg": 359.75852055820303,
    "compass": "N",
    "road_name": null,
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830143258",
+   "start_time_hk": "20260830143259",
    "end_time_hk": "20260830143314",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
-   "lng": 114.26262069,
-   "lat": 22.33675734,
-   "heading_deg": 16.76712738047081,
+   "lng": 114.26263114,
+   "lat": 22.33683896,
+   "heading_deg": 17.777462532482446,
    "compass": "N",
    "road_name": null,
    "in_hk": true
@@ -5029,55 +4945,13 @@
   },
   {
    "start_time_hk": "20260830143914",
-   "end_time_hk": "20260830144015",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.2637723,
-   "lat": 22.3377643,
-   "heading_deg": 291.13089505839844,
-   "compass": "W",
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830144015",
-   "end_time_hk": "20260830144155",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.2615249,
-   "lat": 22.3385677,
-   "heading_deg": null,
-   "compass": null,
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830144155",
-   "end_time_hk": "20260830144215",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.2615249,
-   "lat": 22.3385677,
-   "heading_deg": 111.41553528234863,
-   "compass": "E",
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830144215",
    "end_time_hk": "20260830145053",
    "io": "Outdoor",
    "io_source": "inferred",
    "reason": "short_stop",
    "kind": "stay",
-   "lng": 114.26376395,
-   "lat": 22.33772795,
+   "lng": 114.2637644,
+   "lat": 22.3377556,
    "heading_deg": null,
    "compass": null,
    "road_name": null,
@@ -5408,9 +5282,9 @@
   {
    "start_time_hk": "20260830180857",
    "end_time_hk": "20260830181427",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "interchange",
+   "reason": "short_stop",
    "kind": "stay",
    "lng": 114.2637457,
    "lat": 22.31632767,
@@ -5422,9 +5296,9 @@
   {
    "start_time_hk": "20260830181427",
    "end_time_hk": "20260830181528",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2642464,
    "lat": 22.3165409,
@@ -5440,7 +5314,7 @@
    "io_source": "inferred",
    "reason": "long_stay",
    "kind": "stay",
-   "lng": 114.26730247,
+   "lng": 114.26730807,
    "lat": 22.31709139,
    "heading_deg": null,
    "compass": null,
@@ -5590,9 +5464,9 @@
   {
    "start_time_hk": "20260830190324",
    "end_time_hk": "20260830190419",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.25703985,
    "lat": 22.30584064,
@@ -7227,55 +7101,13 @@
   },
   {
    "start_time_hk": "20260830210511",
-   "end_time_hk": "20260830225320",
-   "io": "Home",
-   "io_source": "inferred",
-   "reason": "near_night_stay",
-   "kind": "stay",
-   "lng": 114.263268855,
-   "lat": 22.3399118,
-   "heading_deg": null,
-   "compass": null,
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830225320",
-   "end_time_hk": "20260830225437",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.26328111,
-   "lat": 22.33994992,
-   "heading_deg": 221.63074317681918,
-   "compass": "SW",
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830225437",
-   "end_time_hk": "20260830225548",
-   "io": "Vehicle",
-   "io_source": "inferred",
-   "reason": "vehicle",
-   "kind": "route",
-   "lng": 114.2618964,
-   "lat": 22.3385089,
-   "heading_deg": 36.83413104811518,
-   "compass": "NE",
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830225548",
    "end_time_hk": "20260830235948",
    "io": "Home",
    "io_source": "inferred",
    "reason": "near_night_stay",
    "kind": "stay",
-   "lng": 114.2632707,
-   "lat": 22.3399162,
+   "lng": 114.26326895,
+   "lat": 22.33991401,
    "heading_deg": null,
    "compass": null,
    "road_name": null,
@@ -9559,7 +9391,7 @@
    114.2405452,
    22.2613301,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.017126
   ],
@@ -9629,7 +9461,7 @@
    114.2393844,
    22.2638234,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.016833
   ],
@@ -9639,7 +9471,7 @@
    114.2392355,
    22.2633022,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.008862
   ],
@@ -9649,7 +9481,7 @@
    114.2405016,
    22.2612546,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.017757
   ],
@@ -10221,47 +10053,27 @@
    {
     "IO": "Vehicle"
    },
-   0.005785
+   0.010529
   ],
   [
-   "20260830142044",
+   "20260830142102",
    "golden",
-   114.2356077,
-   22.3016259,
+   114.23289219,
+   22.30067004,
    {
     "IO": "Vehicle"
    },
-   0.000814
+   0.003611
   ],
   [
-   "20260830142047",
+   "20260830142115",
    "golden",
-   114.2356077,
-   22.3016259,
+   114.23468066,
+   22.30177732,
    {
     "IO": "Vehicle"
    },
-   0.000596
-  ],
-  [
-   "20260830142050",
-   "golden",
-   114.23131627,
-   22.29970329,
-   {
-    "IO": "Vehicle"
-   },
-   0.004167
-  ],
-  [
-   "20260830142105",
-   "golden",
-   114.2333133,
-   22.30091821,
-   {
-    "IO": "Vehicle"
-   },
-   0.003056
+   0.000278
   ],
   [
    "20260830142116",
@@ -10271,57 +10083,37 @@
    {
     "IO": "Vehicle"
    },
-   0.000833
+   0.0025
   ],
   [
-   "20260830142119",
+   "20260830142125",
    "golden",
-   114.23506216,
-   22.30223499,
-   {
-    "IO": "Vehicle"
-   },
-   0.000833
-  ],
-  [
-   "20260830142122",
-   "golden",
-   114.23526256,
-   22.30262504,
-   {
-    "IO": "Vehicle"
-   },
-   0.001667
-  ],
-  [
-   "20260830142128",
-   "golden",
-   114.23540983,
-   22.30349695,
+   114.23537612,
+   22.30304589,
    {
     "IO": "Vehicle"
    },
    0.0025
   ],
   [
-   "20260830142137",
+   "20260830142134",
    "golden",
-   114.2349501,
-   22.30479564,
+   114.23519215,
+   22.30438408,
    {
     "IO": "Vehicle"
    },
    0.000556
   ],
   [
-   "20260830142139",
+   "20260830142136",
    "golden",
-   114.23474412,
-   22.30504987,
+   114.23503817,
+   22.30465909,
    {
     "IO": "Vehicle"
    },
-   0.002222
+   0.003056
   ],
   [
    "20260830142147",
@@ -10381,27 +10173,17 @@
    {
     "IO": "Vehicle"
    },
-   0.001389
+   0.001667
   ],
   [
-   "20260830142234",
+   "20260830142235",
    "golden",
-   114.23057829,
-   22.30982233,
+   114.23061322,
+   22.30989529,
    {
     "IO": "Vehicle"
    },
-   0.002778
-  ],
-  [
-   "20260830142244",
-   "golden",
-   114.231218,
-   22.31065025,
-   {
-    "IO": "Vehicle"
-   },
-   0.001944
+   0.004444
   ],
   [
    "20260830142251",
@@ -10501,17 +10283,7 @@
    {
     "IO": "Vehicle"
    },
-   0.01429
-  ],
-  [
-   "20260830142520",
-   "golden",
-   114.2539163,
-   22.3218554,
-   {
-    "IO": "Vehicle"
-   },
-   0.001821
+   0.016111
   ],
   [
    "20260830142527",
@@ -10521,17 +10293,17 @@
    {
     "IO": "Vehicle"
    },
-   0.004167
+   0.002778
   ],
   [
-   "20260830142542",
+   "20260830142537",
    "golden",
-   114.25291306,
-   22.32137179,
+   114.25208982,
+   22.32135719,
    {
     "IO": "Vehicle"
    },
-   0.000833
+   0.002222
   ],
   [
    "20260830142545",
@@ -10541,27 +10313,17 @@
    {
     "IO": "Vehicle"
    },
-   0.001389
+   0.001944
   ],
   [
-   "20260830142550",
+   "20260830142552",
    "golden",
-   114.25427526,
-   22.3209964,
+   114.25459206,
+   22.32081681,
    {
     "IO": "Vehicle"
    },
    0.001667
-  ],
-  [
-   "20260830142556",
-   "golden",
-   114.25511438,
-   22.32041251,
-   {
-    "IO": "Vehicle"
-   },
-   0.000556
   ],
   [
    "20260830142558",
@@ -10601,37 +10363,47 @@
    {
     "IO": "Vehicle"
    },
+   0.000278
+  ],
+  [
+   "20260830142629",
+   "golden",
+   114.25864895,
+   22.31707851,
+   {
+    "IO": "Vehicle"
+   },
    0.002222
   ],
   [
-   "20260830142636",
+   "20260830142637",
    "golden",
-   114.25957944,
-   22.31664735,
+   114.25972386,
+   22.3166214,
    {
     "IO": "Vehicle"
    },
    0.001389
   ],
   [
-   "20260830142641",
+   "20260830142642",
    "golden",
-   114.26029311,
-   22.3166789,
+   114.2604269,
+   22.31673846,
    {
     "IO": "Vehicle"
    },
    0.001389
   ],
   [
-   "20260830142646",
+   "20260830142647",
    "golden",
-   114.26088697,
-   22.31708306,
+   114.26098388,
+   22.31718358,
    {
     "IO": "Vehicle"
    },
-   0.001111
+   0.000833
   ],
   [
    "20260830142650",
@@ -10881,27 +10653,27 @@
    {
     "IO": "Vehicle"
    },
-   0.003889
+   0.004167
   ],
   [
-   "20260830143125",
+   "20260830143126",
    "golden",
-   114.26292853,
-   22.33135607,
+   114.26296064,
+   22.33143641,
    {
     "IO": "Vehicle"
    },
-   0.003611
+   0.004444
   ],
   [
-   "20260830143138",
+   "20260830143142",
    "golden",
-   114.26321262,
-   22.33239998,
+   114.26322574,
+   22.33270219,
    {
     "IO": "Vehicle"
    },
-   0.001667
+   0.000556
   ],
   [
    "20260830143144",
@@ -10911,27 +10683,27 @@
    {
     "IO": "Vehicle"
    },
-   0.005556
+   0.005833
   ],
   [
-   "20260830143204",
+   "20260830143205",
    "golden",
-   114.26319591,
-   22.33342492,
+   114.26319108,
+   22.33343982,
    {
     "IO": "Vehicle"
    },
-   0.006667
+   0.006111
   ],
   [
-   "20260830143228",
+   "20260830143227",
    "golden",
-   114.26265073,
-   22.33446168,
+   114.26265676,
+   22.33440144,
    {
     "IO": "Vehicle"
    },
-   0.003611
+   0.003889
   ],
   [
    "20260830143241",
@@ -10941,17 +10713,17 @@
    {
     "IO": "Vehicle"
    },
-   0.004722
+   0.005
   ],
   [
-   "20260830143258",
+   "20260830143259",
    "golden",
-   114.26262069,
-   22.33675734,
+   114.26263114,
+   22.33683896,
    {
     "IO": "Vehicle"
    },
-   0.004444
+   0.004167
   ],
   [
    "20260830143314",
@@ -11026,42 +10798,12 @@
   [
    "20260830143914",
    "golden",
-   114.2637723,
-   22.3377643,
-   {
-    "IO": "Vehicle"
-   },
-   0.016954
-  ],
-  [
-   "20260830144015",
-   "golden",
-   114.2615249,
-   22.3385677,
-   {
-    "IO": "Vehicle"
-   },
-   0.027795
-  ],
-  [
-   "20260830144155",
-   "golden",
-   114.2615249,
-   22.3385677,
-   {
-    "IO": "Vehicle"
-   },
-   0.005558
-  ],
-  [
-   "20260830144215",
-   "golden",
-   114.26376395,
-   22.33772795,
+   114.2637644,
+   22.3377556,
    {
     "IO": "Outdoor"
    },
-   0.143815
+   0.194121
   ],
   [
    "20260830145053",
@@ -11339,7 +11081,7 @@
    114.2637457,
    22.31632767,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.091791
   ],
@@ -11349,14 +11091,14 @@
    114.2642464,
    22.3165409,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.017027
   ],
   [
    "20260830181528",
    "golden",
-   114.26730247,
+   114.26730807,
    22.31709139,
    {
     "IO": "Other Indoor"
@@ -11479,7 +11221,7 @@
    114.25703985,
    22.30584064,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.015443
   ],
@@ -12666,8 +12408,8 @@
   [
    "20260830210511",
    "golden",
-   114.263268855,
-   22.3399118,
+   114.26326895,
+   22.33991401,
    {
     "IO": "Home"
    },
@@ -12676,48 +12418,18 @@
   [
    "20260830220000",
    "golden",
-   114.263268855,
-   22.3399118,
+   114.26326895,
+   22.33991401,
    {
     "IO": "Home"
    },
-   0.888889
-  ],
-  [
-   "20260830225320",
-   "golden",
-   114.26328111,
-   22.33994992,
-   {
-    "IO": "Vehicle"
-   },
-   0.021566
-  ],
-  [
-   "20260830225437",
-   "golden",
-   114.2618964,
-   22.3385089,
-   {
-    "IO": "Vehicle"
-   },
-   0.019659
-  ],
-  [
-   "20260830225548",
-   "golden",
-   114.2632707,
-   22.3399162,
-   {
-    "IO": "Home"
-   },
-   0.069886
+   1.0
   ],
   [
    "20260830230000",
    "golden",
-   114.2632707,
-   22.3399162,
+   114.26326895,
+   22.33991401,
    {
     "IO": "Home"
    },
