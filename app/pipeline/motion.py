@@ -26,7 +26,7 @@ def v_net(track: Track, i: int) -> Optional[float]:
     span = t[k] - t[j]
     if span <= 0:
         return None
-    return max(deg_between(track.pings[j], track.pings[k]) - cfg.NOISE_DEG, 0.0) / span
+    return max(deg_between(track.pings[j], track.pings[k]) - cfg.NOISE_DEG, 0.0) / max(span, cfg.V_NET_MIN_SPAN_S)
 
 
 def interval_motions(track: Track) -> List[Motion]:

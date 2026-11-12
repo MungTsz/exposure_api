@@ -4,12 +4,12 @@ Step 3: find the MTR rides among the runs.
   3a  not underground: a jump run with more than MTR_MAX_JUMPS jumps is a
       moving phone that logs rarely -> vehicle (so 3b decides between MTR
       and Vehicle; Vehicle when in doubt); a jump run covering less than
-      MTR_MIN_DEG is shorter than any MTR ride -> walk (Outdoor when in
-      doubt)
+      MTR_MIN_DEG, or not starting and ending at a station, is not an MTR
+      ride -> walk (Outdoor when in doubt)
   3b  rail test: a vehicle run inside Hong Kong whose pings are at a median
-      of >= RAIL_MIN_ROAD_M from the nearest road centreline is
-      above-ground MTR (a car drives on the centreline, a train beside the
-      roads) -> motion RAIL
+      of >= RAIL_MIN_ROAD_M from the nearest road centreline, and that
+      starts and ends at a station, is above-ground MTR (a car drives on
+      the centreline, a train beside the roads) -> motion RAIL
   3c  time extension: a jump faster than MTR_MAX_AVG_V door to door started
       earlier - the pings before it were stale - so the still intervals
       right before it join the ride, newest first, until its speed is
@@ -19,6 +19,9 @@ Step 3: find the MTR rides among the runs.
       -> motion INTERCHANGE
 
 Underground rides are the jumps themselves (GPS dark between two stations).
+"At a station" means within MTR_STATION_MAX_M of an MTR station entrance
+(app/pipeline/stations.py); the entrances cover Hong Kong only, so outside
+HK nothing is MTR.
 """
 
 from statistics import median
@@ -34,17 +37,25 @@ from app.pipeline.runs import centre, to_motions, to_runs
 _MTR_MOTIONS = (Motion.JUMP, Motion.RAIL)
 
 
-def find_mtr(track: Track, runs: Sequence[Run], roads: Sequence[NearestRoad]) -> List[Run]:
-    """3a-3d on the runs of build_runs; `roads` holds each ping's nearest road."""
+def find_mtr(
+    track: Track, runs: Sequence[Run], roads: Sequence[NearestRoad], station_m: Sequence[float],
+) -> List[Run]:
+    """3a-3d on the runs of build_runs; `roads` holds each ping's nearest
+    road, `station_m` its distance to the nearest MTR station entrance."""
     motions = to_motions(runs)
-    _not_underground(track, motions)
-    _rail_test(track, motions, roads)
+    _not_underground(track, motions, station_m)
+    _rail_test(track, motions, roads, station_m)
     _extend_jumps(track, motions)
     _interchanges(track, motions)
     return to_runs(motions)
 
 
-def _not_underground(track: Track, motions: List[Motion]) -> None:
+def _at_stations(run: Run, station_m: Sequence[float]) -> bool:
+    """The run's first and last pings are both at a station."""
+    return max(station_m[run.first_ping], station_m[run.last]) <= cfg.MTR_STATION_MAX_M
+
+
+def _not_underground(track: Track, motions: List[Motion], station_m: Sequence[float]) -> None:
     """3a."""
     for run in to_runs(motions):
         if run.motion != Motion.JUMP:
@@ -52,17 +63,21 @@ def _not_underground(track: Track, motions: List[Motion]) -> None:
         jumps = sum(1 for i in range(run.first, run.last + 1) if track.dd_deg[i] >= cfg.JUMP_DEG)
         if jumps > cfg.MTR_MAX_JUMPS:
             motions[run.first:run.last + 1] = [Motion.VEHICLE] * (run.last - run.first + 1)
-        elif deg_between(track.pings[run.first_ping], track.pings[run.last]) < cfg.MTR_MIN_DEG:
+        elif (deg_between(track.pings[run.first_ping], track.pings[run.last]) < cfg.MTR_MIN_DEG
+              or not _at_stations(run, station_m)):
             motions[run.first:run.last + 1] = [Motion.WALK] * (run.last - run.first + 1)
 
 
-def _rail_test(track: Track, motions: List[Motion], roads: Sequence[NearestRoad]) -> None:
+def _rail_test(
+    track: Track, motions: List[Motion], roads: Sequence[NearestRoad], station_m: Sequence[float],
+) -> None:
     """3b. The road data covers Hong Kong only, so outside HK a vehicle run
     stays a vehicle run."""
     for run in to_runs(motions):
         if run.motion != Motion.VEHICLE or not is_in_hk(*centre(track, run)):
             continue
-        if median(r.distance_m for r in roads[run.first_ping:run.last + 1]) >= cfg.RAIL_MIN_ROAD_M:
+        if (median(r.distance_m for r in roads[run.first_ping:run.last + 1]) >= cfg.RAIL_MIN_ROAD_M
+                and _at_stations(run, station_m)):
             motions[run.first:run.last + 1] = [Motion.RAIL] * (run.last - run.first + 1)
 
 

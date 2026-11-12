@@ -20,7 +20,7 @@ serves interactive docs generated from the code:
 - [Points outside Hong Kong](#points-outside-hong-kong)
 - [Try it yourself](#try-it-yourself)
   - [1. Two pings, same spot, 10 minutes apart: one row](#1-two-pings-same-spot-10-minutes-apart-one-row)
-  - [2. Moving 3 km while GPS was dark: MTR](#2-moving-3-km-while-gps-was-dark-mtr)
+  - [2. GPS dark between two stations: MTR](#2-gps-dark-between-two-stations-mtr)
   - [3. Staying 25 minutes in one spot at night: Home](#3-staying-25-minutes-in-one-spot-at-night-home)
   - [4. Same stay at noon: Other Indoor](#4-same-stay-at-noon-other-indoor)
   - [5. Outside Hong Kong: returned, but no exposure value](#5-outside-hong-kong-returned-but-no-exposure-value)
@@ -75,11 +75,11 @@ i.e. travelling while GPS was dark). Each run then gets an io type:
 
 | run | io | `reason` |
 |---|---|---|
-| a jump (underground: GPS dark between two stations; at most 5 jumps in a row - more is a phone logging rarely on the road, treated as a vehicle run below) | `MTR` | `jump` |
-| a vehicle run whose pings keep 15 m or more from every road centreline (a train runs beside the roads, a car on them) | `MTR` | `rail` |
+| a jump that starts and ends within 150 m of an MTR station entrance and covers 500 m or more (underground: GPS dark between two stations; at most 5 jumps in a row - more is a phone logging rarely on the road, treated as a vehicle run below) | `MTR` | `jump` |
+| a vehicle run whose pings keep 15 m or more from every road centreline (a train runs beside the roads, a car on them) and that starts and ends within 150 m of an MTR station entrance | `MTR` | `rail` |
 | a stop of up to 10 minutes between two MTR runs | `MTR` | `interchange` |
 | any other vehicle run (taxi, bus, minibus, shuttle bus, car, motorcycle) | `Vehicle` | `vehicle` |
-| walking | `Outdoor` | `walk` |
+| walking, or any other jump (not between two stations, or under 500 m: GPS catching up late during a walk) | `Outdoor` | `walk` |
 | a stay inside a [place label](#place-labels) | the label's category | `place_label` |
 | a stay of 20+ minutes overlapping 00:00-06:00 HK | `Home` | `night_stay` |
 | a stay within ~100 m of such a night stay (same upload) | `Home` | `near_night_stay` |
@@ -143,8 +143,9 @@ against a Hong Kong outline (land and waters) by its `lng`/`lat`:
   it out of exposure totals.
 
 A batch with no points in Hong Kong makes no `expo_calx` call at all and
-still finishes as `done`. The road data only covers Hong Kong, so outside
-HK a vehicle run is always `Vehicle` (never `MTR` by the rail test).
+still finishes as `done`. The road data and the MTR station entrances only
+cover Hong Kong, so outside HK nothing is `MTR`: a vehicle run is
+`Vehicle`, a jump `Outdoor`.
 
 The outline is simplified: near the Shenzhen border (Deep Bay, Shenzhen
 River, Sha Tau Kok) it is accurate to roughly 1 km, so a point right on the
@@ -193,17 +194,19 @@ Kong. Batch: `"status": "done", "hours_processed": 1, "rows": 1`.
 [{"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "io_source": "inferred", "reason": "short_stop", "kind": "stay", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.2632457, "lat": 22.3399579, "heading_deg": null, "compass": null, "road_name": null, "in_hk": true}]
 ```
 
-#### 2. Moving 3 km while GPS was dark: MTR
+#### 2. GPS dark between two stations: MTR
 
-Two pings at one station, no ping for 6 minutes, then two pings 3 km away:
+Two pings at Tseung Kwan O station, no ping for 6 minutes, then two pings
+at Yau Tong station, about 2.6 km away:
 
 ```bat
-curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-mtr\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T01:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26,22.3074]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T01:01:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26,22.3074]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T01:07:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2366,22.292]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T01:08:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2366,22.292]}}]}"
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"demo-mtr\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T01:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26,22.3074]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T01:01:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.26,22.3074]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T01:07:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2372,22.2978]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-30T01:08:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2372,22.2978]}}]}"
 ```
 
 Why: moving 300 m or more between two pings means travelling while GPS was
-dark - an underground ride, so the 6 minutes between the stations are
-`"MTR"` (`reason: "jump"`). That ride is a route: its point is at the
+dark; it starts and ends at an MTR station (within 150 m of a station
+entrance), so it is an underground ride and the 6 minutes between the
+stations are `"MTR"` (`reason: "jump"`). That ride is a route: its point is at the
 first station, with the direction of travel (`compass: "SW"`). The minute
 at each station is a short stop (`"Outdoor"`). Batch: `"rows": 3`.
 `/exposure/hourly/demo-mtr`:
@@ -211,8 +214,8 @@ at each station is a short stop (`"Outdoor"`). Batch: `"rows": 3`.
 ```json
 [
   {"hour_start_hk": "20260830090000", "start_time_hk": "20260830090000", "io": "Outdoor", "io_source": "inferred", "reason": "short_stop", "kind": "stay", "delta_t_hours": 0.016666666666666666, "exposure_value": <live value>, "lng": 114.26, "lat": 22.3074, "heading_deg": null, "compass": null, "road_name": null, "in_hk": true},
-  {"hour_start_hk": "20260830090000", "start_time_hk": "20260830090100", "io": "MTR", "io_source": "inferred", "reason": "jump", "kind": "route", "delta_t_hours": 0.1, "exposure_value": <live value>, "lng": 114.26, "lat": 22.3074, "heading_deg": 234.57358418287038, "compass": "SW", "road_name": null, "in_hk": true},
-  {"hour_start_hk": "20260830090000", "start_time_hk": "20260830090700", "io": "Outdoor", "io_source": "inferred", "reason": "short_stop", "kind": "stay", "delta_t_hours": 0.016666666666666666, "exposure_value": <live value>, "lng": 114.2366, "lat": 22.292, "heading_deg": null, "compass": null, "road_name": null, "in_hk": true}
+  {"hour_start_hk": "20260830090000", "start_time_hk": "20260830090100", "io": "MTR", "io_source": "inferred", "reason": "jump", "kind": "route", "delta_t_hours": 0.1, "exposure_value": <live value>, "lng": 114.26, "lat": 22.3074, "heading_deg": 245.5291027624925, "compass": "SW", "road_name": null, "in_hk": true},
+  {"hour_start_hk": "20260830090000", "start_time_hk": "20260830090700", "io": "Outdoor", "io_source": "inferred", "reason": "short_stop", "kind": "stay", "delta_t_hours": 0.016666666666666666, "exposure_value": <live value>, "lng": 114.2372, "lat": 22.2978, "heading_deg": null, "compass": null, "road_name": null, "in_hk": true}
 ]
 ```
 
@@ -282,8 +285,10 @@ curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d
 ```
 
 Why: the first ping is in Sheung Shui (Hong Kong), the next two are in
-Luohu (Shenzhen), about 5 km away with no ping in between - a jump, so the
-first 10 minutes are `"MTR"` (heading north). The 10 minutes in Luohu are
+Luohu (Shenzhen), about 5 km away with no ping in between - a jump. It does
+not end at an MTR station (the station entrances cover Hong Kong only), so
+the first 10 minutes are `"Outdoor"` (`reason: "walk"`, heading north),
+not `MTR`. The 10 minutes in Luohu are
 a short stop outside Hong Kong. Only the Sheung Shui row is sent to
 `expo_calx`; the Luohu row comes back with `in_hk: false` and no value.
 Batch: `"status": "done", "hours_processed": 1, "rows": 2` (`rows`
@@ -291,7 +296,7 @@ counts both). `/exposure/hourly/demo-border`:
 
 ```json
 [
-  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "MTR", "io_source": "inferred", "reason": "jump", "kind": "route", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.128, "lat": 22.501, "heading_deg": 346.9945592676879, "compass": "N", "road_name": null, "in_hk": true},
+  {"hour_start_hk": "20260830000000", "start_time_hk": "20260830000000", "io": "Outdoor", "io_source": "inferred", "reason": "walk", "kind": "route", "delta_t_hours": 0.16666666666666666, "exposure_value": <live value>, "lng": 114.128, "lat": 22.501, "heading_deg": 346.9945592676879, "compass": "N", "road_name": null, "in_hk": true},
   {"hour_start_hk": "20260830000000", "start_time_hk": "20260830001000", "io": "Outdoor", "io_source": "inferred", "reason": "short_stop", "kind": "stay", "delta_t_hours": 0.16666666666666666, "exposure_value": null, "lng": 114.117, "lat": 22.545, "heading_deg": null, "compass": null, "road_name": null, "in_hk": false}
 ]
 ```

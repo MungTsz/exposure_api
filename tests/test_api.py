@@ -9,7 +9,7 @@ from app.clients import praise_client
 from app.config import io_types as io_cfg
 from app.config.constants import BatchStatus
 from app.config.settings import get_settings
-from app.services import ingest_service, label_service, road_service
+from app.services import ingest_service, label_service, road_service, station_service
 from tests.conftest import T0, feature, gpx_document, pings_along
 
 INDOOR_SECONDS = io_cfg.INDOOR_MIN_S
@@ -155,6 +155,17 @@ def test_app_refuses_to_start_without_road_data(monkeypatch, tmp_path):
     get_settings.cache_clear()
     road_service.get_road_index.cache_clear()
     with pytest.raises(road_service.RoadDataMissing, match="missing.geojson"):
+        with TestClient(create_app()):
+            pass
+
+
+def test_app_refuses_to_start_without_station_data(monkeypatch, tmp_path):
+    from app.main import create_app
+
+    monkeypatch.setenv("MTR_STATIONS_PATH", str(tmp_path / "missing.geojson"))
+    get_settings.cache_clear()
+    station_service.get_station_index.cache_clear()
+    with pytest.raises(station_service.StationDataMissing, match="missing.geojson"):
         with TestClient(create_app()):
             pass
 

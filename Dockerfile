@@ -6,6 +6,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ /srv/app/
+# MTR station entrances (kept in git), loaded at startup.
+COPY data/mtr_stations/ /srv/data/mtr_stations/
 
 # Road centrelines (~38 MB, Lands Department via CSDI), loaded at startup.
 # Rebuild the image to pick up a newer version.

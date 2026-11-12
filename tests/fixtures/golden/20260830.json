@@ -116,9 +116,9 @@
   {
    "start_time_hk": "20260830101522",
    "end_time_hk": "20260830101623",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2591261,
    "lat": 22.3385559,
@@ -130,9 +130,9 @@
   {
    "start_time_hk": "20260830101623",
    "end_time_hk": "20260830101628",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2600397,
    "lat": 22.3348043,
@@ -144,9 +144,9 @@
   {
    "start_time_hk": "20260830101628",
    "end_time_hk": "20260830101630",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.26020095,
    "lat": 22.33443642,
@@ -158,9 +158,9 @@
   {
    "start_time_hk": "20260830101630",
    "end_time_hk": "20260830101727",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.26022323,
    "lat": 22.33456221,
@@ -172,9 +172,9 @@
   {
    "start_time_hk": "20260830101727",
    "end_time_hk": "20260830101830",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2629042,
    "lat": 22.3308652,
@@ -578,9 +578,9 @@
   {
    "start_time_hk": "20260830104645",
    "end_time_hk": "20260830104746",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.1718194,
    "lat": 22.3198789,
@@ -592,9 +592,9 @@
   {
    "start_time_hk": "20260830104746",
    "end_time_hk": "20260830104843",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.1677888,
    "lat": 22.3191382,
@@ -606,9 +606,9 @@
   {
    "start_time_hk": "20260830104843",
    "end_time_hk": "20260830104844",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.1636891,
    "lat": 22.31858619,
@@ -620,9 +620,9 @@
   {
    "start_time_hk": "20260830104844",
    "end_time_hk": "20260830104943",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.16368748,
    "lat": 22.318601,
@@ -634,9 +634,9 @@
   {
    "start_time_hk": "20260830104943",
    "end_time_hk": "20260830105043",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.16371127,
    "lat": 22.31729062,
@@ -2999,29 +2999,15 @@
   },
   {
    "start_time_hk": "20260830133203",
-   "end_time_hk": "20260830133304",
-   "io": "Outdoor",
-   "io_source": "inferred",
-   "reason": "walk",
-   "kind": "route",
-   "lng": 114.2384973,
-   "lat": 22.2629963,
-   "heading_deg": 132.06046788831435,
-   "compass": "SE",
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830133304",
    "end_time_hk": "20260830133310",
    "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "walk",
-   "kind": "route",
-   "lng": 114.2387089,
-   "lat": 22.2628197,
-   "heading_deg": 340.24268674528724,
-   "compass": "N",
+   "reason": "short_stop",
+   "kind": "stay",
+   "lng": 114.2385938,
+   "lat": 22.2629963,
+   "heading_deg": null,
+   "compass": null,
    "road_name": null,
    "in_hk": true
   },
@@ -4959,7 +4945,7 @@
   },
   {
    "start_time_hk": "20260830145053",
-   "end_time_hk": "20260830145314",
+   "end_time_hk": "20260830145214",
    "io": "Outdoor",
    "io_source": "inferred",
    "reason": "walk",
@@ -4972,14 +4958,14 @@
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830145314",
+   "start_time_hk": "20260830145214",
    "end_time_hk": "20260830162123",
    "io": "Other Indoor",
    "io_source": "inferred",
    "reason": "long_stay",
    "kind": "stay",
    "lng": 114.2641296,
-   "lat": 22.33705075,
+   "lat": 22.337051,
    "heading_deg": null,
    "compass": null,
    "road_name": null,
@@ -4988,9 +4974,9 @@
   {
    "start_time_hk": "20260830162123",
    "end_time_hk": "20260830162305",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "rail",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2641252,
    "lat": 22.3378071,
@@ -5002,9 +4988,9 @@
   {
    "start_time_hk": "20260830162305",
    "end_time_hk": "20260830162425",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "rail",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2634457,
    "lat": 22.3390051,
@@ -5016,9 +5002,9 @@
   {
    "start_time_hk": "20260830162425",
    "end_time_hk": "20260830162435",
-   "io": "MTR",
+   "io": "Vehicle",
    "io_source": "inferred",
-   "reason": "rail",
+   "reason": "vehicle",
    "kind": "route",
    "lng": 114.2630108,
    "lat": 22.3379837,
@@ -5030,9 +5016,9 @@
   {
    "start_time_hk": "20260830162435",
    "end_time_hk": "20260830162437",
-   "io": "MTR",
+   "io": "Vehicle",
    "io_source": "inferred",
-   "reason": "rail",
+   "reason": "vehicle",
    "kind": "route",
    "lng": 114.26315536,
    "lat": 22.33995193,
@@ -5044,9 +5030,9 @@
   {
    "start_time_hk": "20260830162437",
    "end_time_hk": "20260830162638",
-   "io": "MTR",
+   "io": "Vehicle",
    "io_source": "inferred",
-   "reason": "rail",
+   "reason": "vehicle",
    "kind": "route",
    "lng": 114.2633116,
    "lat": 22.339224,
@@ -5071,52 +5057,24 @@
   },
   {
    "start_time_hk": "20260830175822",
-   "end_time_hk": "20260830175931",
+   "end_time_hk": "20260830175946",
    "io": "Outdoor",
    "io_source": "inferred",
    "reason": "walk",
    "kind": "route",
    "lng": 114.2630475,
    "lat": 22.339912,
-   "heading_deg": 184.53345488107266,
+   "heading_deg": 181.81053624996878,
    "compass": "S",
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830175931",
-   "end_time_hk": "20260830175943",
-   "io": "MTR",
-   "io_source": "inferred",
-   "reason": "jump",
-   "kind": "route",
-   "lng": 114.26285772,
-   "lat": 22.33769813,
-   "heading_deg": 152.8063791536132,
-   "compass": "SE",
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830175943",
-   "end_time_hk": "20260830175946",
-   "io": "MTR",
-   "io_source": "inferred",
-   "reason": "jump",
-   "kind": "route",
-   "lng": 114.26303158,
-   "lat": 22.33738514,
-   "heading_deg": 220.94186470337644,
-   "compass": "SW",
    "road_name": null,
    "in_hk": true
   },
   {
    "start_time_hk": "20260830175946",
    "end_time_hk": "20260830180031",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.26295848,
    "lat": 22.3373072,
@@ -5128,9 +5086,9 @@
   {
    "start_time_hk": "20260830180031",
    "end_time_hk": "20260830180050",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2628466,
    "lat": 22.3339629,
@@ -5142,9 +5100,9 @@
   {
    "start_time_hk": "20260830180050",
    "end_time_hk": "20260830180211",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.26329982,
    "lat": 22.33319325,
@@ -5156,9 +5114,9 @@
   {
    "start_time_hk": "20260830180211",
    "end_time_hk": "20260830180228",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.262836,
    "lat": 22.3309443,
@@ -5170,9 +5128,9 @@
   {
    "start_time_hk": "20260830180228",
    "end_time_hk": "20260830180231",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.26271339,
    "lat": 22.33043561,
@@ -5184,9 +5142,9 @@
   {
    "start_time_hk": "20260830180231",
    "end_time_hk": "20260830180332",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.26289876,
    "lat": 22.33024699,
@@ -5198,9 +5156,9 @@
   {
    "start_time_hk": "20260830180332",
    "end_time_hk": "20260830180432",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.26766034,
    "lat": 22.32480031,
@@ -5212,9 +5170,9 @@
   {
    "start_time_hk": "20260830180432",
    "end_time_hk": "20260830180533",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2670175,
    "lat": 22.3241861,
@@ -5226,9 +5184,9 @@
   {
    "start_time_hk": "20260830180533",
    "end_time_hk": "20260830180634",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2655596,
    "lat": 22.319926,
@@ -5240,9 +5198,9 @@
   {
    "start_time_hk": "20260830180634",
    "end_time_hk": "20260830180736",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.2654756,
    "lat": 22.3176427,
@@ -5254,9 +5212,9 @@
   {
    "start_time_hk": "20260830180736",
    "end_time_hk": "20260830180753",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.266206,
    "lat": 22.3152551,
@@ -5268,9 +5226,9 @@
   {
    "start_time_hk": "20260830180753",
    "end_time_hk": "20260830180857",
-   "io": "MTR",
+   "io": "Outdoor",
    "io_source": "inferred",
-   "reason": "jump",
+   "reason": "walk",
    "kind": "route",
    "lng": 114.26480462,
    "lat": 22.3147584,
@@ -5407,41 +5365,27 @@
   },
   {
    "start_time_hk": "20260830190016",
-   "end_time_hk": "20260830190117",
+   "end_time_hk": "20260830190118",
    "io": "Vehicle",
    "io_source": "inferred",
    "reason": "vehicle",
    "kind": "route",
    "lng": 114.26200784,
    "lat": 22.30762169,
-   "heading_deg": 242.20129120350077,
+   "heading_deg": 243.73547783929,
    "compass": "SW",
    "road_name": "PO YAP ROAD",
    "in_hk": true
   },
   {
-   "start_time_hk": "20260830190117",
-   "end_time_hk": "20260830190220",
-   "io": "Outdoor",
-   "io_source": "inferred",
-   "reason": "walk",
-   "kind": "route",
-   "lng": 114.26074999,
-   "lat": 22.30700831,
-   "heading_deg": 259.0759066607628,
-   "compass": "W",
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830190220",
+   "start_time_hk": "20260830190118",
    "end_time_hk": "20260830190223",
    "io": "Outdoor",
    "io_source": "inferred",
    "reason": "short_stop",
    "kind": "stay",
-   "lng": 114.259113165,
-   "lat": 22.306716915,
+   "lng": 114.25911561000001,
+   "lat": 22.306719864999998,
    "heading_deg": null,
    "compass": null,
    "road_name": null,
@@ -7059,55 +7003,13 @@
   },
   {
    "start_time_hk": "20260830195225",
-   "end_time_hk": "20260830210303",
-   "io": "Other Indoor",
-   "io_source": "inferred",
-   "reason": "long_stay",
-   "kind": "stay",
-   "lng": 114.2640283,
-   "lat": 22.3378519,
-   "heading_deg": null,
-   "compass": null,
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830210303",
-   "end_time_hk": "20260830210410",
-   "io": "Outdoor",
-   "io_source": "inferred",
-   "reason": "walk",
-   "kind": "route",
-   "lng": 114.2633107,
-   "lat": 22.3399112,
-   "heading_deg": 309.41805690047994,
-   "compass": "NW",
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830210410",
-   "end_time_hk": "20260830210511",
-   "io": "Outdoor",
-   "io_source": "inferred",
-   "reason": "walk",
-   "kind": "route",
-   "lng": 114.26301573,
-   "lat": 22.34013545,
-   "heading_deg": 129.2556294383021,
-   "compass": "SE",
-   "road_name": null,
-   "in_hk": true
-  },
-  {
-   "start_time_hk": "20260830210511",
    "end_time_hk": "20260830235948",
    "io": "Home",
    "io_source": "inferred",
    "reason": "near_night_stay",
    "kind": "stay",
-   "lng": 114.26326895,
-   "lat": 22.33991401,
+   "lng": 114.2632737,
+   "lat": 22.3399118,
    "heading_deg": null,
    "compass": null,
    "road_name": null,
@@ -7311,7 +7213,7 @@
    114.2591261,
    22.3385559,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.016936
   ],
@@ -7321,7 +7223,7 @@
    114.2600397,
    22.3348043,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.001379
   ],
@@ -7331,7 +7233,7 @@
    114.26020095,
    22.33443642,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.000556
   ],
@@ -7341,7 +7243,7 @@
    114.26022323,
    22.33456221,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.015843
   ],
@@ -7351,7 +7253,7 @@
    114.2629042,
    22.3308652,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.01775
   ],
@@ -7641,7 +7543,7 @@
    114.1718194,
    22.3198789,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.017042
   ],
@@ -7651,7 +7553,7 @@
    114.1677888,
    22.3191382,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.015564
   ],
@@ -7661,7 +7563,7 @@
    114.1636891,
    22.31858619,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.000278
   ],
@@ -7671,7 +7573,7 @@
    114.16368748,
    22.318601,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.016389
   ],
@@ -7681,7 +7583,7 @@
    114.16371127,
    22.31729062,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.016838
   ],
@@ -9398,22 +9300,12 @@
   [
    "20260830133203",
    "golden",
-   114.2384973,
+   114.2385938,
    22.2629963,
    {
     "IO": "Outdoor"
    },
-   0.016985
-  ],
-  [
-   "20260830133304",
-   "golden",
-   114.2387089,
-   22.2628197,
-   {
-    "IO": "Outdoor"
-   },
-   0.001623
+   0.018607
   ],
   [
    "20260830133310",
@@ -10813,23 +10705,23 @@
    {
     "IO": "Outdoor"
    },
-   0.039195
+   0.022507
   ],
   [
-   "20260830145314",
+   "20260830145214",
    "golden",
    114.2641296,
-   22.33705075,
+   22.337051,
    {
     "IO": "Other Indoor"
    },
-   0.112637
+   0.129324
   ],
   [
    "20260830150000",
    "golden",
    114.2641296,
-   22.33705075,
+   22.337051,
    {
     "IO": "Other Indoor"
    },
@@ -10839,7 +10731,7 @@
    "20260830160000",
    "golden",
    114.2641296,
-   22.33705075,
+   22.337051,
    {
     "IO": "Other Indoor"
    },
@@ -10851,7 +10743,7 @@
    114.2641252,
    22.3378071,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.028467
   ],
@@ -10861,7 +10753,7 @@
    114.2634457,
    22.3390051,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.022124
   ],
@@ -10871,7 +10763,7 @@
    114.2630108,
    22.3379837,
    {
-    "IO": "MTR"
+    "IO": "Vehicle"
    },
    0.002648
   ],
@@ -10881,7 +10773,7 @@
    114.26315536,
    22.33995193,
    {
-    "IO": "MTR"
+    "IO": "Vehicle"
    },
    0.000556
   ],
@@ -10891,7 +10783,7 @@
    114.2633116,
    22.339224,
    {
-    "IO": "MTR"
+    "IO": "Vehicle"
    },
    0.033694
   ],
@@ -10923,27 +10815,7 @@
    {
     "IO": "Outdoor"
    },
-   0.019076
-  ],
-  [
-   "20260830175931",
-   "golden",
-   114.26285772,
-   22.33769813,
-   {
-    "IO": "MTR"
-   },
-   0.003362
-  ],
-  [
-   "20260830175943",
-   "golden",
-   114.26303158,
-   22.33738514,
-   {
-    "IO": "MTR"
-   },
-   0.00079
+   0.023228
   ],
   [
    "20260830175946",
@@ -10951,7 +10823,7 @@
    114.26295848,
    22.3373072,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.003889
   ],
@@ -10961,7 +10833,7 @@
    114.26295848,
    22.3373072,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.008851
   ],
@@ -10971,7 +10843,7 @@
    114.2628466,
    22.3339629,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.005038
   ],
@@ -10981,7 +10853,7 @@
    114.26329982,
    22.33319325,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.022702
   ],
@@ -10991,7 +10863,7 @@
    114.262836,
    22.3309443,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.00452
   ],
@@ -11001,7 +10873,7 @@
    114.26271339,
    22.33043561,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.000833
   ],
@@ -11011,7 +10883,7 @@
    114.26289876,
    22.33024699,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.016944
   ],
@@ -11021,7 +10893,7 @@
    114.26766034,
    22.32480031,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.016754
   ],
@@ -11031,7 +10903,7 @@
    114.2670175,
    22.3241861,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.016881
   ],
@@ -11041,7 +10913,7 @@
    114.2655596,
    22.319926,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.01695
   ],
@@ -11051,7 +10923,7 @@
    114.2654756,
    22.3176427,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.017304
   ],
@@ -11061,7 +10933,7 @@
    114.266206,
    22.3152551,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.004611
   ],
@@ -11071,7 +10943,7 @@
    114.26480462,
    22.3147584,
    {
-    "IO": "MTR"
+    "IO": "Outdoor"
    },
    0.017778
   ],
@@ -11183,27 +11055,17 @@
    {
     "IO": "Vehicle"
    },
-   0.016773
+   0.017051
   ],
   [
-   "20260830190117",
+   "20260830190118",
    "golden",
-   114.26074999,
-   22.30700831,
+   114.25911561000001,
+   22.306719864999998,
    {
     "IO": "Outdoor"
    },
-   0.0175
-  ],
-  [
-   "20260830190220",
-   "golden",
-   114.259113165,
-   22.306716915,
-   {
-    "IO": "Outdoor"
-   },
-   0.000833
+   0.018056
   ],
   [
    "20260830190223",
@@ -12358,68 +12220,38 @@
   [
    "20260830195225",
    "golden",
-   114.2640283,
-   22.3378519,
+   114.2632737,
+   22.3399118,
    {
-    "IO": "Other Indoor"
+    "IO": "Home"
    },
    0.126231
   ],
   [
    "20260830200000",
    "golden",
-   114.2640283,
-   22.3378519,
+   114.2632737,
+   22.3399118,
    {
-    "IO": "Other Indoor"
+    "IO": "Home"
    },
    1.0
   ],
   [
    "20260830210000",
    "golden",
-   114.2640283,
-   22.3378519,
-   {
-    "IO": "Other Indoor"
-   },
-   0.050924
-  ],
-  [
-   "20260830210303",
-   "golden",
-   114.2633107,
-   22.3399112,
-   {
-    "IO": "Outdoor"
-   },
-   0.01852
-  ],
-  [
-   "20260830210410",
-   "golden",
-   114.26301573,
-   22.34013545,
-   {
-    "IO": "Outdoor"
-   },
-   0.017151
-  ],
-  [
-   "20260830210511",
-   "golden",
-   114.26326895,
-   22.33991401,
+   114.2632737,
+   22.3399118,
    {
     "IO": "Home"
    },
-   0.913404
+   1.0
   ],
   [
    "20260830220000",
    "golden",
-   114.26326895,
-   22.33991401,
+   114.2632737,
+   22.3399118,
    {
     "IO": "Home"
    },
@@ -12428,8 +12260,8 @@
   [
    "20260830230000",
    "golden",
-   114.26326895,
-   22.33991401,
+   114.2632737,
+   22.3399118,
    {
     "IO": "Home"
    },

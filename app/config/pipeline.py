@@ -36,9 +36,13 @@ SPIKE_MAX_S = 300
 # Indoor GPS jitter moves a still phone by ~0.0001-0.0002 deg (10-20 m) per
 # ping whatever the time between pings, so a ping's own speed is useless.
 # v_net of a ping = (net displacement between the first and last ping within
-# V_NET_WINDOW_S around it, minus NOISE_DEG, at least 0) / their time span.
+# V_NET_WINDOW_S around it, minus NOISE_DEG, at least 0) / their time span,
+# counted as at least V_NET_MIN_SPAN_S: a window holding only a burst of
+# pings a second apart would turn jitter just over NOISE_DEG into vehicle
+# speed (data/samples/1010 16:12, indoors: 9 m/s over 1 s).
 NOISE_DEG = 0.0003          # ~30 m: GPS jitter floor
 V_NET_WINDOW_S = 120        # centred on the ping
+V_NET_MIN_SPAN_S = 60
 # An interval is, in this order:
 JUMP_DEG = 0.003            # jump  if it moved >= ~300 m (travelled while GPS was dark)
 GAP_S = 120                 # still if it is this long (no pings in between) ...
@@ -73,6 +77,13 @@ MTR_MAX_JUMPS = 5
 # 0.012 deg and more, the walks taken for MTR 0.0033-0.0039 deg
 # (data/samples/1010 21:45, 20260901 14:34). When in doubt, Outdoor.
 MTR_MIN_DEG = 0.005
+# An MTR ride (jump or rail run) starts and ends at a station: its first and
+# last pings must both be this close to an MTR station entrance
+# (app/pipeline/stations.py). The rides on the sample days ended 8-68 m from
+# one; walks and drives taken for MTR 197 m and more (20260830 10:46: 197 m
+# and 269 m). A jump run that fails is a walk (Outdoor), a rail run stays a
+# vehicle run.
+MTR_STATION_MAX_M = 150
 # Rail test: a vehicle run inside Hong Kong whose pings are at a median of
 # at least this many metres from the nearest road centreline is
 # above-ground MTR. A car / bus drives on the centreline (road trips so

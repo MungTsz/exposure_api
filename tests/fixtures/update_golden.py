@@ -18,6 +18,7 @@ from app.pipeline.request_rows import to_request_rows
 from app.pipeline.run import PipelineResult, run_pipeline
 from app.pipeline.time_split import to_hk
 from app.services.road_service import get_road_index
+from app.services.station_service import get_station_index
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SAMPLES_DIR = REPO_ROOT / "data" / "samples"
@@ -42,10 +43,10 @@ def golden_of(result: PipelineResult) -> Dict[str, Any]:
 
 def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
-    roads = get_road_index()
+    roads, stations = get_road_index(), get_station_index()
     for path in sorted(SAMPLES_DIR.glob("*.geojson")):
         features = json.loads(path.read_text(encoding="utf-8"))["features"]
-        golden = {"source": path.name, **golden_of(run_pipeline(features, roads))}
+        golden = {"source": path.name, **golden_of(run_pipeline(features, roads, stations))}
         (GOLDEN_DIR / f"{path.stem}.json").write_text(json.dumps(golden, indent=1), encoding="utf-8")
         print(f"{path.name}: {len(golden['points'])} points, {len(golden['rows'])} rows")
 

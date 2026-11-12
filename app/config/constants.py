@@ -72,6 +72,21 @@ ROAD_NAME_PROPERTY = "ENGLISHSTREETNAME"
 # the middle of Hong Kong: accurate to well under 1% anywhere in HK.
 ROAD_PROJECTION_ORIGIN = (114.17, 22.32)
 
+# --- MTR station entrances (app/pipeline/stations.py) ---
+# OpenStreetMap (data (c) OpenStreetMap contributors, ODbL) via the Overpass
+# API: every station entrance and station node in a box around Hong Kong.
+# app/services/station_service.py keeps the ones inside HK_BOUNDARY that
+# are MTR heavy rail (Light Rail stops and the Peak Tram are left out) and
+# writes them to settings.mtr_stations_path.
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+MTR_STATIONS_QUERY = (
+    "[out:json][timeout:120];"
+    "(node[railway=subway_entrance](22.15,113.82,22.57,114.45);"
+    "node[railway=station](22.15,113.82,22.57,114.45););out;"
+)
+# OSM `station` tag values of the station nodes kept.
+MTR_STATION_TYPES = ("subway", "train")
+
 # --- Input formats ---
 # `type` of a record made from one GPX <trkpt> (app/pipeline/parsers/gpx.py).
 # These records are what an uploaded GPX file is stored as in a batch.

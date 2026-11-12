@@ -22,7 +22,8 @@ uvicorn app.main:app --reload
 Run everything from the repo root. Settings are read from environment
 variables, falling back to `.env` (see `app/config/settings.py`); the app
 refuses to start if `PRAISE_API_KEY` or `PRAISE_MYID` is missing, or if the
-road centrelines are not at `ROAD_CENTRELINES_PATH`.
+road centrelines are not at `ROAD_CENTRELINES_PATH` or the MTR station
+entrances not at `MTR_STATIONS_PATH`.
 
 ### Road data
 
@@ -35,15 +36,26 @@ dataset from the CSDI portal (GeoJSON, ~40,000 lines, updated monthly).
 again now and then to pick up new roads. The file is loaded once at
 startup (~3 s).
 
+### MTR station data
+
+An MTR ride must start and end at a station. The station entrances (and
+station nodes) of the MTR heavy-rail lines come from
+[OpenStreetMap](https://www.openstreetmap.org/copyright) (data © OpenStreetMap
+contributors, ODbL) via the Overpass API, and are kept in git at
+`data/mtr_stations/mtr_stations.geojson` (~700 points; Light Rail stops, the
+Peak Tram and Shenzhen are left out). Refresh it when a station opens with
+`python -m app.services.station_service [PATH]`.
+
 Tests (no API key, network or road file needed - `expo_calx` is mocked,
-each test builds its own roads):
+each test builds its own roads and stations):
 
 ```bash
 pip install -r requirements-dev.txt
 pytest
 ```
 
-Docker (the image downloads the road centrelines at build time):
+Docker (the image downloads the road centrelines at build time and copies
+the MTR station entrances):
 
 ```bash
 docker build -t exposure-api .
@@ -54,9 +66,9 @@ docker run -p 8000:8000 -e PRAISE_API_KEY=... -e PRAISE_MYID=... -e EXPOSURE_DB_
 
 ```
 app/
-  main.py                 FastAPI app: startup (road data, DB init, resume unfinished batches), routers
+  main.py                 FastAPI app: startup (road and station data, DB init, resume unfinished batches), routers
   config/                 every parameter lives here
-    settings.py             deployment values from env/.env (secrets, URL, DB and road file paths, timeouts)
+    settings.py             deployment values from env/.env (secrets, URL, DB, road and station file paths, timeouts)
     constants.py            fixed facts (HK timezone, time formats, HK outline, API names, statuses, reasons)
     pipeline.py             pipeline thresholds, one section per step
     io_types.py             io type names, expo_calx labels, decision tree and place label thresholds
@@ -67,8 +79,9 @@ app/
     routes/exposure.py      GET / DELETE /exposure/hourly/{pid}
     routes/place_labels.py  PUT/DELETE /place-labels/{label_id}
   services/
-    ingest_service.py       background job: place labels + roads + pipeline -> expo_calx -> DB
+    ingest_service.py       background job: place labels + roads + stations + pipeline -> expo_calx -> DB
     road_service.py         loads (and downloads) the road centrelines
+    station_service.py      loads (and refreshes) the MTR station entrances
     label_service.py        re-runs stored batches near a place label that changed
     day_service.py          deletes one day of a pid
   pipeline/               the pipeline: pure functions, no I/O
@@ -77,12 +90,13 @@ app/
     spikes.py               step 0: remove GPS spikes
     motion.py               step 1: jump / still / walk / vehicle per interval
     runs.py                 step 2: runs of the same motion, cleaned up
-    mtr.py                  step 3: rail test, MTR time extension, interchanges
+    mtr.py                  step 3: MTR rides (station check, rail test), time extension, interchanges
     classify.py             step 4: the decision tree (io type of each run)
     place_labels.py         match a stay against the users' place labels
     points.py               step 5a: stay points and thinned route points
     time_split.py           step 5b: cut each point's time at HK clock hours
     roads.py                nearest road centreline of each ping
+    stations.py             distance from each ping to the nearest MTR station entrance
     region.py               inside / outside Hong Kong
     request_rows.py         build expo_calx rows
     geo.py                  shared distance / direction / shape helpers
@@ -90,12 +104,20 @@ app/
   clients/praise_client.py  expo_calx HTTP client (parallel calls, capped)
   db/                     SQLite: connection/schema + one repository per table
 docs/API.md               API documentation for app developers
+docs/io_flowchart*.png    flowcharts of how the io type is decided, simple and full
+                          (python -m docs.io_flowchart)
 tests/                    pytest suite: one file per layer, plus sample-day regression
 notebooks/                step-by-step pipeline walkthrough
 data/samples/             sample GPS exports (GeoJSON and GPX)
+data/mtr_stations/        MTR station entrances (OpenStreetMap)
 ```
 
 ## How the pipeline works
+
+Flowcharts of how the io type is decided: a simple one for a first read
+([docs/io_flowchart_simple.png](docs/io_flowchart_simple.png)), and steps 0-4
+with every rule and threshold for anyone re-implementing the logic
+([docs/io_flowchart.png](docs/io_flowchart.png)).
 
 Terms used throughout the code:
 
@@ -128,7 +150,9 @@ Steps (`app/pipeline/run.py`; thresholds in `app/config/pipeline.py`):
    `still` if it lasted >= 120 s (no pings in between) or its `v_net` is
    below ~0.5 m/s; `walk` below ~3 m/s; else `vehicle`. A ping's own speed
    is useless indoors (10-20 m of jitter per ping looks like 15 m/s at 1 s
-   intervals), hence `v_net`.
+   intervals), hence `v_net`, which is measured over at least 60 s (a
+   window holding only two pings a second apart would turn jitter into
+   vehicle speed).
 2. **Runs**: consecutive intervals with the same motion. Clean-up, repeated
    until nothing changes: a still/walk run of <= 3 min between two
    vehicle/jump runs is part of the trip (traffic light, bus stop); a
@@ -139,19 +163,23 @@ Steps (`app/pipeline/run.py`; thresholds in `app/config/pipeline.py`):
    rarely while moving (watch data: 7-20 jumps per ride; an underground
    ride has 1-4), so it becomes a vehicle run - Vehicle is the default
    when the two can't be told apart. A jump run covering less than
-   0.005 deg (~500 m, under one MTR stop) is a walk the GPS caught up with
-   late, so it becomes a walk run - Outdoor when in doubt. Then the **rail test** - a vehicle run
-   inside Hong Kong whose pings are at a median of >= 15 m from the nearest
-   road centreline is above-ground MTR (a car drives on the centreline: 2-6 m on the sample
-   days; the East Rail line runs beside the roads: 24 m). A jump faster than
+   0.005 deg (~500 m, under one MTR stop), or whose first and last pings
+   are not both within 150 m of an MTR station entrance, is not a ride: it
+   becomes a walk run - Outdoor when in doubt. Then the **rail test** - a
+   vehicle run inside Hong Kong whose pings are at a median of >= 15 m from
+   the nearest road centreline, and that starts and ends at a station, is
+   above-ground MTR (a car drives on the centreline: 2-6 m on the sample
+   days; the East Rail line runs beside the roads: 24 m). The rides on the
+   sample days started and ended 8-68 m from an entrance; walks and drives
+   taken for MTR 197 m and more. A jump faster than
    an MTR ride can be (~15 m/s door to door) started earlier - the pings
    before it were stale - so the still time right before it joins the ride.
    A still/walk run of <= 10 min between two MTR runs is an interchange.
 4. **Decision tree** (`app/pipeline/classify.py`):
    ```
    run
-   ├─ jump ............................................. MTR      (underground)
-   ├─ rail (vehicle far from roads) .................... MTR      (above ground)
+   ├─ jump (station to station) ........................ MTR      (underground)
+   ├─ rail (vehicle far from roads, station to station)  MTR      (above ground)
    ├─ interchange ...................................... MTR      (changing lines)
    ├─ vehicle .......................................... Vehicle  (taxi, bus, minibus, car, ...)
    ├─ walk ............................................. Outdoor
@@ -187,7 +215,7 @@ Steps (`app/pipeline/run.py`; thresholds in `app/config/pipeline.py`):
    row is stored. Rows outside HK have `in_hk = 0` and no exposure value.
 
 On the sample days this keeps ~1 point per 10-15 pings: 20260830 (8,139
-pings) becomes 520 points and 544 rows (14 calls). It was checked against
+pings) becomes 501 points and 525 rows (14 calls). It was checked against
 the person's own account of 1011 and 1012 (`tests/test_regression.py`):
 every taxi, bus, shuttle bus and MTR ride (including the above-ground East
 Rail line and three interchanges) comes out right, and so does the Kwun
@@ -268,9 +296,10 @@ ever tested from a browser context (e.g. Expo web).
 All parameters live in `app/config/`:
 
 - `pipeline.py` - one section per step: spikes (`SPIKE_*`), interval motion
-  (`NOISE_DEG`, `V_NET_WINDOW_S`, `JUMP_DEG`, `GAP_S`, `STILL_MAX_V`,
+  (`NOISE_DEG`, `V_NET_WINDOW_S`, `V_NET_MIN_SPAN_S`, `JUMP_DEG`, `GAP_S`, `STILL_MAX_V`,
   `WALK_MAX_V`), runs (`STOP_MAX_S`, `MIN_*_RUN_S`, `SAME_PLACE_*`), MTR
-  (`RAIL_MIN_ROAD_M`, `MTR_MAX_AVG_V`, `INTERCHANGE_MAX_S`) and output
+  (`MTR_MAX_JUMPS`, `MTR_MIN_DEG`, `MTR_STATION_MAX_M`, `RAIL_MIN_ROAD_M`,
+  `MTR_MAX_AVG_V`, `INTERCHANGE_MAX_S`) and output
   points (`ROUTE_TOL_M`, `ROUTE_MAX_GAP_DEG`, `ROAD_NAME_MAX_M`). Higher
   `ROUTE_TOL_M` / `ROUTE_MAX_GAP_DEG` = fewer points, rows and `expo_calx`
   calls.
@@ -278,8 +307,8 @@ All parameters live in `app/config/`:
   stay rules (`INDOOR_MIN_S`, `HOME_HOURS`, `HOME_RADIUS_DEG`) and place
   label matching (`PLACE_LABEL_*`).
 - `settings.py` - deployment values (`PRAISE_MAX_ROWS_PER_CALL`,
-  `PRAISE_MAX_CONCURRENT_CALLS`, `MAX_INGEST_BODY_BYTES`, timeouts, DB and
-  road file paths), overridable by env vars.
+  `PRAISE_MAX_CONCURRENT_CALLS`, `MAX_INGEST_BODY_BYTES`, timeouts, DB,
+  road and station file paths), overridable by env vars.
 - `constants.py` - `HK_BOUNDARY`, the Hong Kong outline used for `in_hk`
   and the rail test.
 
@@ -297,10 +326,15 @@ changes - if the change is intended, regenerate the golden files with
   (`data/samples/1009`, Kwun Tong line: 4 jumps). They are told apart only
   by the number of jumps in a row (more than 5 = Vehicle, the default when
   in doubt): a long MTR ride with a fix at every station would come out as
-  Vehicle, a short sparse bus ride as MTR.
+  Vehicle. A short sparse bus ride is MTR only if it also happens to start
+  and end within 150 m of a station entrance.
+- **Station check**: a walk between two stations with GPS too sparse to
+  show the walk (a jump of 500 m+ from one station area to another) still
+  comes out as MTR. Outside Hong Kong nothing is MTR (the entrances cover
+  HK only): an underground ride abroad is `Outdoor`.
 - **Rail test**: the 15 m threshold comes from two East Rail rides; other
-  lines are untested. A ferry is far from every road, so it would come out
-  as `MTR`.
+  lines are untested. A ferry is far from every road, but rarely starts and
+  ends at an MTR station, so it comes out as `Vehicle`.
 - **Short stays**: a stay under 20 minutes without a label (a quick shop
   visit) is `Outdoor`, and so is walking through a station.
 - **Unlabelled schools and offices** (e.g. a university classroom) are

@@ -8,7 +8,7 @@ from app.pipeline.models import Motion, Track
 from app.pipeline.place_labels import PlaceLabel, match_place_label
 from app.pipeline.run import run_pipeline
 from app.pipeline.runs import to_runs
-from tests.conftest import HOUR, at, feature, jittering, ping, road_index
+from tests.conftest import HOUR, at, feature, jittering, ping, road_index, station_index
 
 HOME, OFFICE, SCHOOL, OTHER = io_cfg.HOME, io_cfg.OFFICE, io_cfg.SCHOOL, io_cfg.OTHER_INDOOR
 
@@ -154,7 +154,7 @@ def test_pipeline_points_carry_io_source():
     lng, lat = at()
     features = [feature(12 * HOUR + k * 60, lng=lng, lat=lat) for k in range(21)]
     roads = road_index()
-    (labelled,) = run_pipeline(features, roads, [label("s", SCHOOL, 25)]).points
+    (labelled,) = run_pipeline(features, roads, station_index(), [label("s", SCHOOL, 25)]).points
     assert (labelled.io, labelled.io_source) == (SCHOOL, IoSource.LABEL)
-    (inferred,) = run_pipeline(features, roads).points
+    (inferred,) = run_pipeline(features, roads, station_index()).points
     assert (inferred.io, inferred.io_source) == (OTHER, IoSource.INFERRED)

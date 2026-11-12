@@ -34,7 +34,7 @@ class NearestRoad:
     name: Optional[str]   # None if unnamed (or no road)
 
 
-def _project(lng_lat: np.ndarray) -> np.ndarray:
+def project(lng_lat: np.ndarray) -> np.ndarray:
     """(n, 2) array of lng, lat -> metres east, north of the origin."""
     return np.column_stack((
         (lng_lat[:, 0] - _ORIGIN_LNG) * _M_PER_DEG_LNG,
@@ -49,7 +49,7 @@ class RoadIndex:
         geometries, names = [], []
         for vertices, name in lines:
             if len(vertices) >= 2:
-                geometries.append(shapely.LineString(_project(np.asarray(vertices, dtype=float))))
+                geometries.append(shapely.LineString(project(np.asarray(vertices, dtype=float))))
                 names.append(name)
         self._names: List[Optional[str]] = names
         self._tree = shapely.STRtree(geometries)
@@ -78,7 +78,7 @@ class RoadIndex:
             return []
         if not self._names:
             return [NearestRoad(math.inf, None)] * len(points)
-        xy = _project(np.array([(p.lng, p.lat) for p in points], dtype=float))
+        xy = project(np.array([(p.lng, p.lat) for p in points], dtype=float))
         (point_idx, road_idx), distances = self._tree.query_nearest(
             shapely.points(xy), return_distance=True, all_matches=False,
         )

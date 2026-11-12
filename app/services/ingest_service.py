@@ -23,7 +23,7 @@ from app.pipeline.models import HourlySlice
 from app.pipeline.request_rows import to_request_rows
 from app.pipeline.run import PipelineResult, run_pipeline
 from app.pipeline.time_split import to_hk
-from app.services import road_service
+from app.services import road_service, station_service
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,9 @@ def _process_batch(batch_id: int, pid: str, features: List[Dict[str, Any]], log_
     logger.info("%s processing %d raw features", log_prefix, len(features))
 
     place_labels = place_label_repository.get_all()
-    result = run_pipeline(features, road_service.get_road_index(), place_labels)
+    result = run_pipeline(
+        features, road_service.get_road_index(), station_service.get_station_index(), place_labels,
+    )
     _log_result(log_prefix, result, len(place_labels))
 
     hk_slices = result.hk_slices

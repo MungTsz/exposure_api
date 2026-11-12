@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     # relative path is relative to the repo root.
     road_centrelines_path: str = "data/road_centrelines/RoadCentreLine.geojson"
 
+    # --- MTR station entrances ---
+    # Station entrances from OpenStreetMap (constants.MTR_STATIONS_QUERY),
+    # kept in git; loaded once at startup like the road centrelines.
+    mtr_stations_path: str = "data/mtr_stations/mtr_stations.geojson"
+
     # --- Logging ---
     log_level: str = "INFO"
 

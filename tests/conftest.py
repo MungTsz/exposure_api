@@ -9,7 +9,8 @@ from app.config.constants import EARTH_RADIUS_M
 from app.config.settings import get_settings
 from app.pipeline.models import Ping
 from app.pipeline.roads import RoadIndex
-from app.services import road_service
+from app.pipeline.stations import StationIndex
+from app.services import road_service, station_service
 
 T0 = datetime(2026, 8, 29, 16, 0, 0, tzinfo=timezone.utc)  # 00:00 HK on 2026-08-30
 HOUR = 3600
@@ -23,20 +24,25 @@ M_PER_DEG_LNG = M_PER_DEG_LAT * math.cos(math.radians(LAT0))
 
 @pytest.fixture(autouse=True)
 def test_settings(monkeypatch, tmp_path):
-    """Dummy secrets, a throwaway DB and an empty road file for every test.
-    Env vars take priority over the real .env, so real keys are never used."""
-    roads = tmp_path / "roads.geojson"
-    roads.write_text(json.dumps({"type": "FeatureCollection", "features": []}), encoding="utf-8")
+    """Dummy secrets, a throwaway DB and empty road and station files for
+    every test. Env vars take priority over the real .env, so real keys are
+    never used."""
+    roads, stations = tmp_path / "roads.geojson", tmp_path / "stations.geojson"
+    for empty in (roads, stations):
+        empty.write_text(json.dumps({"type": "FeatureCollection", "features": []}), encoding="utf-8")
     monkeypatch.setenv("PRAISE_API_KEY", "test-key")
     monkeypatch.setenv("PRAISE_MYID", "test-id")
     monkeypatch.setenv("EXPOSURE_DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("PRAISE_MAX_ROWS_PER_CALL", "40")
     monkeypatch.setenv("ROAD_CENTRELINES_PATH", str(roads))
+    monkeypatch.setenv("MTR_STATIONS_PATH", str(stations))
     get_settings.cache_clear()
     road_service.get_road_index.cache_clear()
+    station_service.get_station_index.cache_clear()
     yield get_settings()
     get_settings.cache_clear()
     road_service.get_road_index.cache_clear()
+    station_service.get_station_index.cache_clear()
 
 
 def at(east_m: float = 0.0, north_m: float = 0.0) -> Tuple[float, float]:
@@ -74,6 +80,11 @@ def jittering(start_s: float, end_s: float, every_s: float, centre_m=(0.0, 0.0),
 def road_index(*lines_m: Sequence[Tuple[float, float]]) -> RoadIndex:
     """A RoadIndex of straight roads, each given as (east, north) metre vertices."""
     return RoadIndex([([at(*v) for v in line], f"ROAD {i}") for i, line in enumerate(lines_m)])
+
+
+def station_index(*entrances_m: Tuple[float, float]) -> StationIndex:
+    """A StationIndex of entrances given as (east, north) metres."""
+    return StationIndex(at(*e) for e in entrances_m)
 
 
 def feature(seconds: float, lng: float = LNG0, lat: float = LAT0) -> dict:

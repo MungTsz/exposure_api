@@ -23,11 +23,12 @@ from app.pipeline.runs import build_runs, to_motions, to_runs
 from app.pipeline.spikes import remove_spikes
 from app.pipeline.time_split import split_by_hour
 from tests.conftest import (
-    HOUR, LAT0, LNG0, T0, at, feature, gpx_document, jittering, ping, pings_along, road_index,
+    HOUR, LAT0, LNG0, T0, at, feature, gpx_document, jittering, ping, pings_along, road_index, station_index,
 )
 
 J, S, W, V = Motion.JUMP, Motion.STILL, Motion.WALK, Motion.VEHICLE
 NO_ROADS = road_index()
+NO_STATIONS = station_index()
 
 
 def track_and_runs(*segments):
@@ -42,6 +43,11 @@ def track_and_runs(*segments):
 
 def far_roads(track):
     return [NearestRoad(1000.0, None)] * len(track)
+
+
+def at_stations(track):
+    """Every ping right at an MTR station entrance."""
+    return [0.0] * len(track)
 
 
 # --- input: parsers ---
@@ -166,6 +172,12 @@ def test_jitter_in_place_is_still():
     assert set(interval_motions(track)) == {S}
 
 
+def test_jitter_in_bursts_a_second_apart_is_still():
+    # data/samples/1010 16:12, indoors: two fixes ~40 m apart 1 s apart, then ~100 s without a ping
+    pings = [p for k in range(10) for p in (ping(k * 98), ping(k * 98 + 1, east_m=-15, north_m=25))]
+    assert set(interval_motions(Track.from_pings(pings))) == {S}
+
+
 def test_walking_is_walk():
     track = Track.from_pings(pings_along(0, 600, 5, velocity_mps=(0, 1.3)))
     assert set(interval_motions(track)) == {W}
@@ -243,19 +255,19 @@ def _drive(**kw):
 def test_vehicle_run_away_from_roads_is_rail():
     track, runs = _drive()
     roads = road_index([(-100, -100), (6000, -100)]).nearest(track.pings)  # a road 100 m away
-    assert [r.motion for r in find_mtr(track, runs, roads)] == [Motion.RAIL]
+    assert [r.motion for r in find_mtr(track, runs, roads, at_stations(track))] == [Motion.RAIL]
 
 
 def test_vehicle_run_on_a_road_stays_vehicle():
     track, runs = _drive()
     roads = road_index([(-100, 3), (6000, 3)]).nearest(track.pings)
-    assert [r.motion for r in find_mtr(track, runs, roads)] == [V]
+    assert [r.motion for r in find_mtr(track, runs, roads, at_stations(track))] == [V]
 
 
 def test_rail_test_only_applies_inside_hong_kong():
     macau = [Ping(p.utc, p.lng - 0.6, p.lat - 0.09) for p in pings_along(0, 300, 1, velocity_mps=(15, 0))]
     track, runs = track_and_runs((V, macau))
-    assert [r.motion for r in find_mtr(track, runs, far_roads(track))] == [V]
+    assert [r.motion for r in find_mtr(track, runs, far_roads(track), at_stations(track))] == [V]
 
 
 @pytest.mark.parametrize("stops, expected", [
@@ -266,7 +278,7 @@ def test_many_jumps_in_a_row_is_sparse_logging_not_mtr(stops, expected):
     pings = [ping(0)] + [ping(k * 60, east_m=k * 600) for k in range(1, stops + 1)]
     track, runs = track_and_runs((J, pings))
     roads = road_index([(-100, 0), (100000, 0)]).nearest(track.pings)  # on the road
-    assert [r.motion for r in find_mtr(track, runs, roads)] == [expected]
+    assert [r.motion for r in find_mtr(track, runs, roads, at_stations(track))] == [expected]
 
 
 @pytest.mark.parametrize("east_m, expected", [
@@ -279,14 +291,35 @@ def test_jump_run_shorter_than_an_mtr_ride_is_a_walk(east_m, expected):
         (J, [ping(602, east_m=east_m)]),
         (S, jittering(610, 1200, 10, centre_m=(east_m, 0))),
     )
-    assert [r.motion for r in find_mtr(track, runs, far_roads(track))] == [S, expected, S]
+    assert [r.motion for r in find_mtr(track, runs, far_roads(track), at_stations(track))] == [S, expected, S]
+
+
+@pytest.mark.parametrize("entrance_m, expected", [
+    (cfg.MTR_STATION_MAX_M - 10, J),
+    (cfg.MTR_STATION_MAX_M + 50, W),   # data/samples/20260830 10:46: a walk ending 269 m from any station
+])
+def test_underground_ride_starts_and_ends_at_a_station(entrance_m, expected):
+    track, runs = track_and_runs(
+        (S, jittering(0, 600, 10)), (J, [ping(800, east_m=3000)]), (S, jittering(810, 1400, 10, centre_m=(3000, 0))),
+    )
+    stations = station_index((0, entrance_m), (3000, entrance_m))
+    assert [r.motion for r in find_mtr(track, runs, far_roads(track), stations.distances_m(track.pings))] == [
+        S, expected, S,
+    ]
+
+
+@pytest.mark.parametrize("entrance_m, expected", [(cfg.MTR_STATION_MAX_M - 10, Motion.RAIL), (cfg.MTR_STATION_MAX_M + 50, V)])
+def test_rail_run_starts_and_ends_at_a_station(entrance_m, expected):
+    track, runs = _drive()   # 4.5 km east, away from every road
+    stations = station_index((0, entrance_m), (4500, entrance_m))
+    assert [r.motion for r in find_mtr(track, runs, far_roads(track), stations.distances_m(track.pings))] == [expected]
 
 
 def test_jump_too_fast_for_mtr_started_earlier():
     station = jittering(0, 600, 10)
     arrival = [ping(620, east_m=3000), ping(630, east_m=3000)]  # 3 km in 20 s: stale pings before it
     track, runs = track_and_runs((S, station), (J, arrival[:1]), (S, arrival[1:]))
-    jump = next(r for r in find_mtr(track, runs, far_roads(track)) if r.motion == J)
+    jump = next(r for r in find_mtr(track, runs, far_roads(track), at_stations(track)) if r.motion == J)
     needed_s = (at(east_m=3000)[0] - LNG0) / cfg.MTR_MAX_AVG_V
     assert jump.seconds(track) >= needed_s
     assert jump.seconds(track) < needed_s + 10
@@ -300,7 +333,7 @@ def test_short_stop_between_two_mtr_rides_is_an_interchange(stop_minutes, expect
         (S, jittering(310, 300 + stop_s, 10, centre_m=(3000, 0))),
         (J, [ping(310 + stop_s, east_m=6000)]),
     )
-    assert [r.motion for r in find_mtr(track, runs, far_roads(track))] == [J, expected, J]
+    assert [r.motion for r in find_mtr(track, runs, far_roads(track), at_stations(track))] == [J, expected, J]
 
 
 # --- step 4: decision tree ---
@@ -480,7 +513,7 @@ def test_a_whole_morning():
     label = PlaceLabel("o", "c", io_cfg.OFFICE, *at(*office_m), radius_m=25)
     roads = road_index([(-500, 0), (20000, 0)])
 
-    result = run_pipeline(_records(home + walk + drive + office), roads, [label])
+    result = run_pipeline(_records(home + walk + drive + office), roads, NO_STATIONS, [label])
 
     io_order = [p.io for p in result.points]
     assert [io for i, io in enumerate(io_order) if i == 0 or io != io_order[i - 1]] == [
@@ -494,10 +527,10 @@ def test_a_whole_morning():
 
 
 def test_no_pings_no_output():
-    result = run_pipeline([], NO_ROADS)
+    result = run_pipeline([], NO_ROADS, NO_STATIONS)
     assert (result.points, result.slices, result.first_ping_utc) == ([], [], None)
 
 
 def test_one_ping_owns_no_time():
-    result = run_pipeline(_records([ping(0)]), NO_ROADS)
+    result = run_pipeline(_records([ping(0)]), NO_ROADS, NO_STATIONS)
     assert result.slices == [] and result.pings == 1
