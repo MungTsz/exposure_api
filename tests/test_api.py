@@ -170,6 +170,19 @@ def test_app_refuses_to_start_without_station_data(monkeypatch, tmp_path):
             pass
 
 
+@pytest.mark.parametrize("name", ["PRAISE_API_KEY", "PRAISE_MYID"])
+def test_app_refuses_to_start_with_empty_secret(monkeypatch, name):
+    """`.env` copied from `.env.example` and never filled in."""
+    from pydantic import ValidationError
+
+    from app.main import create_app
+
+    monkeypatch.setenv(name, "")
+    get_settings.cache_clear()
+    with pytest.raises(ValidationError, match=name.lower()):
+        create_app()
+
+
 def test_ingest_gpx_then_read_hourly(client, monkeypatch):
     monkeypatch.setattr(praise_client, "calculate_exposure", _fake_exposure)
     data = gpx_document([(0, HK["lng"], HK["lat"]), (INDOOR_SECONDS, HK["lng"], HK["lat"])])

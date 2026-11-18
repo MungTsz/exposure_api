@@ -12,18 +12,202 @@ API documentation: [docs/API.md](docs/API.md).
 
 ## Setup
 
-```bash
-pip install -r requirements.txt
-cp .env.example .env                  # fill in PRAISE_API_KEY and PRAISE_MYID
-python -m app.services.road_service   # download the road centrelines (~38 MB, once)
-uvicorn app.main:app --reload
+Five steps from a fresh clone to a running server that has scored one real
+upload. Every command is **Command Prompt (`cmd.exe`)** syntax and runs
+from the repo root. In bash, use `cp` instead of `copy` and single-quote
+the JSON body instead of escaping its quotes.
+
+### What you need
+
+- **Python 3.11 or newer.** If `python --version` opens the Microsoft
+  Store or prints nothing, `python` is the Windows Store placeholder: use
+  an Anaconda Prompt, or the full path of a real `python.exe`, for every
+  `python` command below.
+- **A PRAISE-HK API key and its user id** (the `apikey` and `myid` sent
+  with every `expo_calx` call). They are not in the repo; ask the project
+  owner.
+- **Internet access**: step 3 downloads ~38 MB from the CSDI portal once,
+  and every upload calls `expo_calx` at `praise-web.ust.hk`.
+
+### 1. Install the packages
+
+```bat
+python -m pip install -r requirements.txt
 ```
 
-Run everything from the repo root. Settings are read from environment
-variables, falling back to `.env` (see `app/config/settings.py`); the app
-refuses to start if `PRAISE_API_KEY` or `PRAISE_MYID` is missing, or if the
-road centrelines are not at `ROAD_CENTRELINES_PATH` or the MTR station
-entrances not at `MTR_STATIONS_PATH`.
+Use `python -m pip` here and `python -m uvicorn` in step 4 (not plain `pip`
+and `uvicorn`), so both use the same Python.
+
+### 2. Put the key in `.env`
+
+```bat
+copy .env.example .env
+notepad .env
+```
+
+Fill in the two required lines, with no quotes and no spaces around `=`:
+
+```
+PRAISE_API_KEY=your-key
+PRAISE_MYID=your-id
+```
+
+Leave the other lines commented out unless you need to change a default
+(see [Settings](#settings)). `.env` is git-ignored: never commit it. It is
+read once, when the server starts: restart the server after changing it
+(`--reload` only watches `.py` files).
+
+### 3. Download the road centrelines (once)
+
+```bat
+python -m app.services.road_service
+```
+
+This saves ~38 MB to `data\road_centrelines\RoadCentreLine.geojson` and
+ends with `done: ... MB`. The MTR station entrances are already in git
+(`data\mtr_stations\`); there is nothing to download for them. More about
+both files: [Road data](#road-data), [MTR station data](#mtr-station-data).
+
+### 4. Start the server
+
+```bat
+python -m uvicorn app.main:app --reload
+```
+
+It is ready when the log ends like this (the counts depend on the
+downloaded road file):
+
+```
+... INFO app.services.road_service: loaded 39915 road centrelines from ...\data\road_centrelines\RoadCentreLine.geojson
+... INFO app.services.station_service: loaded 698 MTR station entrances from ...\data\mtr_stations\mtr_stations.geojson
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+```
+
+Leave this window open; `Ctrl+C` stops the server. The first start creates
+the database, `exposure.db` in the repo root. `--reload` restarts the
+server whenever a `.py` file changes, which is for development only. To
+reach the server from a phone or emulator on the same Wi-Fi, see
+[Local network testing](#local-network-testing-rn-app-on-a-deviceemulator);
+from anywhere (mobile data, another network), see
+[Public URL from anywhere](#public-url-from-anywhere-ngrok).
+
+### 5. Check it works
+
+Open <http://localhost:8000/docs> in a browser: Swagger UI lists every
+endpoint.
+
+Then send one real upload from a **second** `cmd.exe` window: two pings 10
+minutes apart at the same spot in Clear Water Bay. This makes one
+`expo_calx` call, so it also checks the key.
+
+```bat
+curl -X POST http://localhost:8000/ingest -H "Content-Type: application/json" -d "{\"pid\":\"setup-check\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:00:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}},{\"type\":\"Feature\",\"properties\":{\"time\":\"2026-08-29T16:10:00.000Z\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[114.2632457,22.3399579]}}]}"
+```
+
+```json
+{"status":"queued","batch_id":1}
+```
+
+The batch runs in the background, and one `expo_calx` call takes 20-30 s.
+Poll it with the `batch_id` you got (`1` on a new database):
+
+```bat
+curl http://localhost:8000/ingest/1
+```
+
+`"status":"processing"` means wait and ask again. When it is finished:
+
+```json
+{"id":1,"pid":"setup-check","status":"done","error_detail":null,"hours_processed":1,"rows":1,"created_at":"...","updated_at":"..."}
+```
+
+Read the stored row:
+
+```bat
+curl http://localhost:8000/exposure/hourly/setup-check
+```
+
+```json
+[{"hour_start_hk":"20260830000000","start_time_hk":"20260830000000","io":"Outdoor","io_source":"inferred","reason":"short_stop","kind":"stay","delta_t_hours":0.16666666666666666,"exposure_value":<live value>,"lng":114.2632457,"lat":22.3399579,"heading_deg":null,"compass":null,"road_name":null,"in_hk":true}]
+```
+
+`exposure_value` is a number from the live `expo_calx` API (it depends on
+the real air quality at that time and place); everything else should match
+exactly. If it does, the setup is done. Delete the test row:
+
+```bat
+curl -X DELETE "http://localhost:8000/exposure/hourly/setup-check?date=2026-08-30"
+```
+
+```json
+{"pid":"setup-check","date":"2026-08-30","rows_deleted":1}
+```
+
+More examples, one for each behaviour (MTR, Home at night, outside Hong
+Kong, place labels, ...): [Try it yourself](docs/API.md#try-it-yourself).
+
+### If it does not work
+
+| what you see | why | fix |
+|---|---|---|
+| `ValidationError: 2 validation errors for Settings` ... `praise_api_key` `Field required` | there is no `.env` in the repo root, or the line is missing | step 2 |
+| ... `praise_api_key` `String should have at least 1 character` | the line is in `.env` but empty | fill in the value, step 2 |
+| `ModuleNotFoundError: No module named 'app'` | the server was started outside the repo root | `cd` to the repo root and start it again |
+| `No module named uvicorn` (or `fastapi`, `shapely`, ...) | the packages went into a different Python | step 1, with the same `python` you start the server with |
+| `RoadDataMissing: road centrelines not found at ...` | step 3 not done, or `ROAD_CENTRELINES_PATH` points elsewhere | run the command shown in the message |
+| `StationDataMissing: MTR station entrances not found at ...` | `data\mtr_stations\mtr_stations.geojson` is missing from the checkout | `git checkout -- data/mtr_stations`, or run the command shown in the message |
+| `[Errno 10048] error while attempting to bind on address ('127.0.0.1', 8000)` | port 8000 is taken, e.g. by a server still running in another window | stop that one, or add `--port 8001` |
+| `curl: (7) Failed to connect to localhost port 8000` | the server is not running, or stopped with an error | look at the server window |
+| batch `"status":"error"`, with PRAISE-HK's message in `error_detail` | wrong key or id, or `expo_calx` is down or unreachable | check `.env`, restart the server, upload again |
+
+### Settings
+
+Every setting is an environment variable, read from the shell first and
+then from `.env` (so `set NAME=value` in `cmd.exe` before starting the
+server overrides `.env`). Defined in
+[app/config/settings.py](app/config/settings.py).
+
+| variable | default | meaning |
+|---|---|---|
+| `PRAISE_API_KEY` | required | PRAISE-HK API key; the server refuses to start if it is missing or empty |
+| `PRAISE_MYID` | required | PRAISE-HK user id sent with the key; same rule |
+| `PRAISE_IR_CAL_BASE_URL` | `https://praise-web.ust.hk/uwsgi/praise-ir-cal` | where `expo_calx` is called |
+| `PRAISE_MAX_ROWS_PER_CALL` | `40` | rows per `expo_calx` call |
+| `PRAISE_MAX_CONCURRENT_CALLS` | `10` | `expo_calx` calls running at once, shared by all uploads in one server process |
+| `PRAISE_REQUEST_TIMEOUT_SECONDS` | `60` | timeout of one `expo_calx` call |
+| `MAX_INGEST_BODY_BYTES` | `5242880` (5 MB) | largest accepted upload; larger ones get `413` |
+| `EXPOSURE_DB_PATH` | `exposure.db` | the SQLite file; a relative path is relative to the folder the server is started in. In production, put it on persistent storage |
+| `ROAD_CENTRELINES_PATH` | `data/road_centrelines/RoadCentreLine.geojson` | road centrelines, loaded at startup; a relative path is relative to the repo root |
+| `MTR_STATIONS_PATH` | `data/mtr_stations/mtr_stations.geojson` | MTR station entrances, loaded at startup; same rule |
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, ... |
+
+### Running in production (Docker)
+
+The image downloads the road centrelines at build time and copies the MTR
+station entrances. `.env` is not copied into the image: pass the key as
+environment variables. Keep the database on a volume, or every restart of
+the container loses it.
+
+```bat
+docker build -t exposure-api .
+docker run -p 8000:8000 -e PRAISE_API_KEY=your-key -e PRAISE_MYID=your-id -e EXPOSURE_DB_PATH=/data/exposure.db -v exposure-data:/data exposure-api
+```
+
+Then check it as in [step 5](#5-check-it-works). The server listens on
+`PORT` (default `8000`) inside the container. Rebuild the image now and
+then to pick up newer road data. Uploads still being processed when the
+server stops are picked up again at the next start.
+
+### Tests
+
+No API key, network or road file needed: `expo_calx` is mocked, and each
+test builds its own roads and stations.
+
+```bat
+python -m pip install -r requirements-dev.txt
+python -m pytest
+```
 
 ### Road data
 
@@ -45,22 +229,6 @@ contributors, ODbL) via the Overpass API, and are kept in git at
 `data/mtr_stations/mtr_stations.geojson` (~700 points; Light Rail stops, the
 Peak Tram and Shenzhen are left out). Refresh it when a station opens with
 `python -m app.services.station_service [PATH]`.
-
-Tests (no API key, network or road file needed - `expo_calx` is mocked,
-each test builds its own roads and stations):
-
-```bash
-pip install -r requirements-dev.txt
-pytest
-```
-
-Docker (the image downloads the road centrelines at build time and copies
-the MTR station entrances):
-
-```bash
-docker build -t exposure-api .
-docker run -p 8000:8000 -e PRAISE_API_KEY=... -e PRAISE_MYID=... -e EXPOSURE_DB_PATH=/data/exposure.db -v exposure-data:/data exposure-api
-```
 
 ## Project layout
 
@@ -265,7 +433,7 @@ from the same machine - a phone or emulator on the same Wi-Fi network can't
 reach that. To test the RN app against a locally-running server:
 
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Then find your machine's LAN IP (Windows: `ipconfig`, look for the `IPv4
@@ -290,6 +458,100 @@ even though the IP and binding are correct.
 No CORS setup is needed: CORS only applies to browser `fetch` calls, and a
 native RN app isn't subject to it. Only add `CORSMiddleware` if the app is
 ever tested from a browser context (e.g. Expo web).
+
+## Public URL from anywhere (ngrok)
+
+The LAN method above only works when the phone is on the same Wi-Fi. To
+let the app call this server from anywhere (mobile data, another network),
+without opening a port, run an [ngrok](https://ngrok.com) tunnel next to
+it: ngrok gives one fixed `https://` address that forwards to
+`127.0.0.1:8000` on this machine. The free plan includes one static
+domain, so the address stays the same after every restart and the app
+never needs a rebuild.
+
+**Before you share the address**: the API has no authentication. Anyone
+who has the address can upload (on your PRAISE-HK key), read any pid's
+rows, delete days and change place labels. Give it only to the people who
+need it, keep it out of git, and stop ngrok when nobody needs it.
+
+### Once
+
+1. Sign up at ngrok.com (free), download `ngrok.exe` for Windows and unzip
+   it, e.g. to `C:\Users\<you>\ngrok\`.
+2. Save your authtoken (shown in the ngrok dashboard):
+
+   ```bat
+   C:\Users\<you>\ngrok\ngrok.exe config add-authtoken <your-authtoken>
+   ```
+
+3. Claim the free static domain in the ngrok dashboard, e.g.
+   `<your-domain>.ngrok-free.dev`.
+4. Stop the machine from sleeping: a sleeping machine stops both the server
+   and the tunnel. The screen still turns off, and locking with `Win+L` is
+   fine.
+
+   ```bat
+   powercfg /change standby-timeout-ac 0
+   powercfg /change hibernate-timeout-ac 0
+   ```
+
+### Every time
+
+Two `cmd.exe` windows, both left open (minimizing them is fine).
+
+Window 1, the server, from the repo root (no `--reload`):
+
+```bat
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Wait for `Application startup complete.`
+
+Window 2, the tunnel:
+
+```bat
+C:\Users\<you>\ngrok\ngrok.exe http --url=<your-domain>.ngrok-free.dev 127.0.0.1:8000
+```
+
+Wait for `Session Status  online`. Write `127.0.0.1`, not `localhost`:
+Windows may turn `localhost` into the IPv6 address `::1`, where the server
+is not listening.
+
+Check from outside: turn off Wi-Fi on a phone and open
+`https://<your-domain>.ngrok-free.dev/docs` on mobile data (ngrok first
+shows a warning page in a browser; tap "Visit Site"). Swagger UI means it
+works. Or from a third `cmd.exe` window:
+
+```bat
+curl https://<your-domain>.ngrok-free.dev/exposure/hourly/ngrok-check -H "ngrok-skip-browser-warning: 1"
+```
+
+```json
+[]
+```
+
+(`[]` because that pid has no rows.) To stop, press `Ctrl+C` in both
+windows.
+
+### In the RN app
+
+- Base URL: `https://<your-domain>.ngrok-free.dev` (`https`, no port).
+- Send the header `ngrok-skip-browser-warning: 1` with every request.
+  Without it the free plan may answer with ngrok's HTML warning page
+  instead of the API's JSON.
+- Nothing else changes: same endpoints, same JSON. The address is `https`,
+  so the Android cleartext setting above is not needed.
+
+### Good to know
+
+- Signing out, restarting or a Windows Update reboot closes both windows:
+  start both again. The address stays the same, and uploads that were
+  still processing are picked up again when the server starts.
+- The free plan has monthly request and bandwidth limits. If the app
+  suddenly can't connect while both windows say they are running, check
+  the ngrok dashboard.
+- For a server that runs without this machine, deploy the Docker image
+  instead ([Running in production](#running-in-production-docker)).
 
 ## Tuning
 

@@ -7,7 +7,11 @@ the day gets an io type - `Home`, `Office`, `School`, `Other Indoor`,
 School, Other Indoor); those labels decide the io type of stays at that
 place, for every user.
 
-Base URL when running locally: `http://localhost:8000`. The server also
+Base URL when running locally: `http://localhost:8000`. When the server is
+reachable from anywhere through ngrok
+([Public URL from anywhere](../README.md#public-url-from-anywhere-ngrok)),
+use its `https://<your-domain>.ngrok-free.dev` address instead and send the
+header `ngrok-skip-browser-warning: 1` with every request. The server also
 serves interactive docs generated from the code:
 [Swagger UI](http://localhost:8000/docs) and
 [ReDoc](http://localhost:8000/redoc) (both need the server running).
@@ -309,7 +313,7 @@ limit:
 
 ```bat
 set MAX_INGEST_BODY_BYTES=200
-uvicorn app.main:app
+python -m uvicorn app.main:app
 ```
 
 Now send any upload from the scenarios above (they are all over 200
@@ -658,14 +662,7 @@ Every error body is JSON with a `detail` field.
 
 ## Configuration
 
-Set as environment variables or in `.env` (see
-[.env.example](../.env.example) and
-[app/config/settings.py](../app/config/settings.py)):
-
-| variable | default | meaning |
-|---|---|---|
-| `MAX_INGEST_BODY_BYTES` | `5242880` (5 MB) | largest accepted `POST /ingest` / `POST /ingest/gpx` body |
-| `PRAISE_MAX_CONCURRENT_CALLS` | `10` | `expo_calx` calls running at once, per server process |
-| `PRAISE_MAX_ROWS_PER_CALL` | `40` | rows per `expo_calx` call |
-| `PRAISE_REQUEST_TIMEOUT_SECONDS` | `60` | timeout for one `expo_calx` call |
-| `ROAD_CENTRELINES_PATH` | `data/road_centrelines/RoadCentreLine.geojson` | road centrelines loaded at startup (the server refuses to start without them; see the README) |
+The limits above (body size, `expo_calx` calls at once, rows per call,
+timeout) are server settings. How to set up and start the server, and the
+full list of settings: [Setup in the README](../README.md#setup) and
+[Settings](../README.md#settings).

@@ -6,13 +6,15 @@ Values come from environment variables, falling back to the repo-root
 Variable names are case-insensitive (`PRAISE_API_KEY` sets
 `praise_api_key`).
 
-`PRAISE_API_KEY` and `PRAISE_MYID` have no default, so the app refuses to
-start without them (see `app.main.create_app`).
+`PRAISE_API_KEY` and `PRAISE_MYID` have no default and must not be empty,
+so the app refuses to start without them (see `app.main.create_app`) -
+also when `.env` was copied from `.env.example` and never filled in.
 """
 
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -22,8 +24,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=REPO_ROOT / ".env", extra="ignore")
 
     # --- PRAISE-HK expo_calx API ---
-    praise_api_key: str
-    praise_myid: str
+    # An empty value (`PRAISE_API_KEY=`) counts as missing.
+    praise_api_key: str = Field(min_length=1)
+    praise_myid: str = Field(min_length=1)
     praise_ir_cal_base_url: str = "https://praise-web.ust.hk/uwsgi/praise-ir-cal"
 
     # No documented rate limit and no server-confirmed batch size limit -
